@@ -1,15 +1,12 @@
 <!--
 Sync Impact Report
-- Version change: N/A → 1.0.0 (initial ratification)
-- Added principles:
-  - I. OAuth2 Authorization Code Flow
-  - II. Docs as Code
-  - III. Simplicity
-- Added sections:
-  - Architecture Constraints
-  - Documentation Standards
-  - Governance
-- Removed sections: None (initial version)
+- Version change: 1.0.0 → 1.1.0 (MINOR — expanded secret management guidance)
+- Modified principles:
+  - I. OAuth2 Authorization Code Flow — added .env secret storage rules
+- Modified sections:
+  - Architecture Constraints — added .env and .gitignore requirements
+- Added sections: None
+- Removed sections: None
 - Templates requiring updates:
   - .specify/templates/plan-template.md ✅ no changes needed
   - .specify/templates/spec-template.md ✅ no changes needed
@@ -26,16 +23,17 @@ Sync Impact Report
 All web-to-API communication MUST authenticate using the
 OAuth2 Authorization Code Flow with a client secret.
 
-- The web application MUST NOT use implicit grants, resource
-  owner password credentials, or client-credentials-only flows
-  for user-facing requests.
-- A server-side component MUST hold the client secret; it MUST
-  NOT be exposed to the browser.
-- Token refresh MUST be handled server-side.
+- The client ID and client secret MUST be stored in a `.env`
+  file at the repository root.
+- The `.env` file MUST be listed in `.gitignore` and MUST NOT
+  be committed to version control.
+- A `.env.example` file with placeholder keys (no real values)
+  SHOULD be committed to document required variables.
 
 **Rationale**: Organisation architectural standard. The
 Authorization Code Flow with a client secret is the only
-approved pattern for web applications calling APIs.
+approved pattern for web applications calling APIs. Secrets
+in `.env` keeps credentials out of version history.
 
 ### II. Docs as Code
 
@@ -75,6 +73,8 @@ burden, security exposure, and cognitive load.
   is explicitly justified and approved.
 - The backend MUST serve only the page and the OAuth2 /
   token-proxy endpoints.
+- A `.env` file MUST hold all secrets; `.gitignore` MUST
+  include `.env`.
 
 ## Documentation Standards
 
@@ -90,8 +90,8 @@ burden, security exposure, and cognitive load.
 - Amendments require a pull request with a clear rationale and
   version bump per semantic versioning (MAJOR for principle
   removal/redefinition, MINOR for additions, PATCH for
-  clarifications).
+  clarifications).docs: amend constitution to v1.1.0 (add .env secret management rules)
 - All pull requests MUST verify compliance with the principles
   above before merge.
 
-**Version**: 1.0.0 | **Ratified**: 2026-02-20 | **Last Amended**: 2026-02-20
+**Version**: 1.1.0 | **Ratified**: 2026-02-20 | **Last Amended**: 2026-02-20

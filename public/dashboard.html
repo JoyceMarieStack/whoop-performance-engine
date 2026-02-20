@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Recovery Dashboard — Whoop</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body class="dashboard">
+  <header class="dashboard-header">
+    <h1>Whoop <span class="accent">Recovery</span></h1>
+  </header>
+
+  <main class="dashboard-body">
+    <!-- Loading state -->
+    <div id="loading" class="loading-container">
+      <div class="spinner"></div>
+      <p class="loading-text">Loading your recovery data…</p>
+    </div>
+
+    <!-- Metric cards (hidden until data loads) -->
+    <div id="metrics" class="metric-grid" style="display:none;">
+      <div id="card-recovery" class="metric-card">
+        <p class="metric-label">Recovery Score</p>
+        <p id="recovery-value" class="metric-value">—</p>
+        <p class="metric-unit">%</p>
+      </div>
+      <div id="card-hrv" class="metric-card">
+        <p class="metric-label">HRV</p>
+        <p id="hrv-value" class="metric-value">—</p>
+        <p class="metric-unit">ms (RMSSD)</p>
+      </div>
+      <div id="card-rhr" class="metric-card">
+        <p class="metric-label">Resting Heart Rate</p>
+        <p id="rhr-value" class="metric-value">—</p>
+        <p class="metric-unit">bpm</p>
+      </div>
+    </div>
+
+    <!-- Error state (hidden by default) -->
+    <div id="error" class="state-message" style="display:none;">
+      <h2 id="error-title">Something went wrong</h2>
+      <p id="error-text">We couldn't load your recovery data. Please try again.</p>
+      <button id="retry-btn" class="btn btn-secondary">Retry</button>
+    </div>
+
+    <!-- No-data state (hidden by default) -->
+    <div id="no-data" class="state-message" style="display:none;">
+      <h2>No Recovery Data Yet</h2>
+      <p>Your recovery hasn't been scored yet. Check back after your next sleep is processed by Whoop.</p>
+    </div>
+  </main>
+
+  <script src="/js/dashboard.js"></script>
+</body>
+</html>

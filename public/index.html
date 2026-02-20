@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Whoop Recovery Dashboard</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body class="landing">
+  <main class="hero">
+    <div class="hero-content">
+      <h1 class="hero-title">Whoop Recovery<br><span class="accent">Dashboard</span></h1>
+      <p class="hero-tagline">View your recovery score, HRV, and resting heart rate at a glance.</p>
+
+      <div id="error-message" class="error-banner" style="display:none;"></div>
+
+      <a href="/auth/whoop" class="btn btn-primary">Connect to Whoop</a>
+    </div>
+  </main>
+
+  <script>
+    // Display error message from query parameter (e.g., ?error=access_denied)
+    const params = new URLSearchParams(window.location.search);
+    const error = params.get('error');
+    if (error) {
+      const errorEl = document.getElementById('error-message');
+      const messages = {
+        access_denied: 'Authorization was denied. Please try again to connect your Whoop account.',
+        auth_failed: 'Authentication failed. Please try connecting again.',
+        invalid_state: 'Security validation failed. Please try connecting again.',
+      };
+      errorEl.textContent = messages[error] || 'An unexpected error occurred. Please try again.';
+      errorEl.style.display = 'block';
+
+      // Clean the URL without reloading
+      window.history.replaceState({}, '', '/');
+    }
+  </script>
+</body>
+</html>
