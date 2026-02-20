@@ -1,0 +1,349 @@
+/* ==========================================================================
+   Whoop Recovery Dashboard — Styles
+   Dark-themed, modern, minimal design
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Design Tokens (CSS Custom Properties)
+   -------------------------------------------------------------------------- */
+:root {
+  /* Background & surface */
+  --color-bg: #0d0d0d;
+  --color-surface: #1a1a2e;
+  --color-surface-hover: #222240;
+
+  /* Text */
+  --color-text: #e8e8e8;
+  --color-text-muted: #8a8a9a;
+
+  /* Accent */
+  --color-accent: #00d4aa;
+  --color-accent-hover: #00f0c0;
+
+  /* Recovery score colors */
+  --color-recovery-green: #00d26a;
+  --color-recovery-yellow: #f5b700;
+  --color-recovery-red: #ff3b3b;
+
+  /* Error */
+  --color-error-bg: rgba(255, 59, 59, 0.12);
+  --color-error-border: rgba(255, 59, 59, 0.4);
+  --color-error-text: #ff6b6b;
+
+  /* Spacing */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 2rem;
+  --space-xl: 3rem;
+  --space-2xl: 4rem;
+
+  /* Typography */
+  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+    Ubuntu, Cantarell, 'Helvetica Neue', Arial, sans-serif;
+  --font-size-sm: 0.875rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.25rem;
+  --font-size-xl: 1.5rem;
+  --font-size-2xl: 2rem;
+  --font-size-3xl: 3rem;
+  --font-size-metric: 3.5rem;
+
+  /* Border radius */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms ease;
+}
+
+/* --------------------------------------------------------------------------
+   Base Reset & Defaults
+   -------------------------------------------------------------------------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-family);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+/* --------------------------------------------------------------------------
+   Landing Page — Hero Section
+   -------------------------------------------------------------------------- */
+.hero {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  text-align: center;
+  padding: var(--space-lg);
+}
+
+.hero-content {
+  max-width: 600px;
+}
+
+.hero-title {
+  font-size: var(--font-size-3xl);
+  font-weight: 700;
+  line-height: 1.15;
+  margin-bottom: var(--space-md);
+  letter-spacing: -0.025em;
+}
+
+.hero-title .accent {
+  color: var(--color-accent);
+}
+
+.hero-tagline {
+  font-size: var(--font-size-lg);
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-xl);
+  line-height: 1.5;
+}
+
+/* --------------------------------------------------------------------------
+   Buttons
+   -------------------------------------------------------------------------- */
+.btn {
+  display: inline-block;
+  padding: var(--space-md) var(--space-xl);
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  text-decoration: none;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background-color var(--transition-normal),
+              transform var(--transition-fast),
+              box-shadow var(--transition-normal);
+}
+
+.btn-primary {
+  background-color: var(--color-accent);
+  color: var(--color-bg);
+}
+
+.btn-primary:hover {
+  background-color: var(--color-accent-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 212, 170, 0.3);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+.btn-secondary {
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.btn-secondary:hover {
+  background-color: var(--color-surface-hover);
+  transform: translateY(-1px);
+}
+
+/* --------------------------------------------------------------------------
+   Error Banner
+   -------------------------------------------------------------------------- */
+.error-banner {
+  background-color: var(--color-error-bg);
+  border: 1px solid var(--color-error-border);
+  color: var(--color-error-text);
+  padding: var(--space-md) var(--space-lg);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-xl);
+  font-size: var(--font-size-base);
+  line-height: 1.5;
+}
+
+/* --------------------------------------------------------------------------
+   Dashboard Layout
+   -------------------------------------------------------------------------- */
+.dashboard {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-lg) var(--space-xl);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.dashboard-header h1 {
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.dashboard-header .accent {
+  color: var(--color-accent);
+}
+
+.dashboard-body {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-xl);
+}
+
+/* --------------------------------------------------------------------------
+   Metric Cards
+   -------------------------------------------------------------------------- */
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-lg);
+  width: 100%;
+  max-width: 900px;
+}
+
+.metric-card {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: var(--space-xl) var(--space-lg);
+  text-align: center;
+  transition: background-color var(--transition-normal),
+              transform var(--transition-fast),
+              box-shadow var(--transition-normal);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.metric-card:hover {
+  background-color: var(--color-surface-hover);
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+}
+
+.metric-label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: var(--space-sm);
+}
+
+.metric-value {
+  font-size: var(--font-size-metric);
+  font-weight: 700;
+  line-height: 1.1;
+  margin-bottom: var(--space-xs);
+}
+
+.metric-unit {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* Recovery score color coding */
+.recovery-green .metric-value {
+  color: var(--color-recovery-green);
+}
+
+.recovery-yellow .metric-value {
+  color: var(--color-recovery-yellow);
+}
+
+.recovery-red .metric-value {
+  color: var(--color-recovery-red);
+}
+
+/* --------------------------------------------------------------------------
+   Loading State
+   -------------------------------------------------------------------------- */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
+}
+
+.spinner {
+  width: 48px;
+  height: 48px;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-text {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-base);
+}
+
+/* --------------------------------------------------------------------------
+   Error & No-Data States (Dashboard)
+   -------------------------------------------------------------------------- */
+.state-message {
+  text-align: center;
+  max-width: 440px;
+}
+
+.state-message h2 {
+  font-size: var(--font-size-xl);
+  margin-bottom: var(--space-sm);
+}
+
+.state-message p {
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-lg);
+  line-height: 1.6;
+}
+
+/* --------------------------------------------------------------------------
+   Responsive — Mobile
+   -------------------------------------------------------------------------- */
+@media (max-width: 768px) {
+  .hero-title {
+    font-size: var(--font-size-2xl);
+  }
+
+  .metric-grid {
+    grid-template-columns: 1fr;
+    max-width: 400px;
+  }
+
+  .metric-value {
+    font-size: var(--font-size-2xl);
+  }
+
+  .dashboard-header {
+    padding: var(--space-md) var(--space-lg);
+  }
+
+  .dashboard-body {
+    padding: var(--space-lg);
+  }
+}
