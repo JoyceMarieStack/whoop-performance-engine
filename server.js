@@ -196,11 +196,7 @@ let oauthState = '';
 // ---------------------------------------------------------------------------
 // T012 — GET / (Landing page)
 // ---------------------------------------------------------------------------
-app.get('/', async (req, res) => {
-  if (await isAuthenticated()) {
-    return res.redirect('/dashboard');
-  }
-  // Serve landing page, passing error param if present
+app.get('/', (_req, res) => {
   res.sendFile(join(__dirname, 'public', 'index.html'));
 });
 
@@ -271,7 +267,7 @@ app.get('/callback', async (req, res) => {
     // Clear CSRF state after successful use
     oauthState = '';
 
-    res.redirect('/dashboard');
+    res.redirect('/');
   } catch (err) {
     console.error('OAuth callback error:', err.message);
     res.redirect('/?error=auth_failed');
@@ -279,13 +275,10 @@ app.get('/callback', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// T013 — GET /dashboard (Dashboard page)
+// T013 — GET /dashboard (Backwards-compatible redirect)
 // ---------------------------------------------------------------------------
-app.get('/dashboard', async (req, res) => {
-  if (!(await isAuthenticated())) {
-    return res.redirect('/');
-  }
-  res.sendFile(join(__dirname, 'public', 'dashboard.html'));
+app.get('/dashboard', (_req, res) => {
+  res.redirect('/');
 });
 
 // ---------------------------------------------------------------------------
