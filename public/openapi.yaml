@@ -1,0 +1,240 @@
+openapi: "3.0.3"
+info:
+  title: Whoop Performance Engine — BFF API
+  version: "2.0.0"
+  description: |
+    Backend-for-frontend (BFF) API for the Whoop Performance Engine.
+
+    This Express server handles OAuth authentication with the Whoop API and
+    proxies recovery data requests. The landing page at `/` serves interactive
+    API documentation powered by Scalar API Reference.
+
+    ## Getting Started
+
+    1. Visit `/auth/whoop` to connect your Whoop account via OAuth.
+    2. After authorization, you are redirected back to `/`.
+    3. Use the "Try It" panel on any endpoint to send live requests.
+
+    ## Authentication
+
+    Endpoints under `/api/*` require a valid OAuth session. If you have not
+    authenticated, these endpoints return `401`. Initiate OAuth by navigating
+    to `/auth/whoop` in your browser.
+
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+
+paths:
+  /:
+    get:
+      summary: API Reference (Landing Page)
+      description: |
+        Serves the Scalar API Reference documentation page.
+        This interactive page renders the OpenAPI specification and provides
+        a "Try It" panel for calling endpoints directly from the browser.
+      tags:
+        - Documentation
+      responses:
+        "200":
+          description: Scalar API Reference HTML page
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /auth/whoop:
+    get:
+      summary: Initiate Whoop OAuth flow
+      description: |
+        Redirects the user to the Whoop authorization screen.
+        Generates a random `state` parameter for CSRF protection.
+      tags:
+        - Authentication
+      responses:
+        "302":
+          description: Redirect to Whoop authorization URL
+          headers:
+            Location:
+              schema:
+                type: string
+                example: https://api.prod.whoop.com/oauth/oauth2/auth?client_id=...&redirect_uri=...&response_type=code&scope=read:recovery+offline&state=...
+
+  /callback:
+    get:
+      summary: OAuth callback handler
+      description: |
+        Receives the authorization code from Whoop after user authorization.
+        Exchanges the code for access and refresh tokens server-side.
+        Persists both tokens to `.env`.
+        Redirects user to `/` on success or failure.
+      tags:
+        - Authentication
+      parameters:
+        - name: code
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Authorization code from Whoop (present on success)
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+          description: CSRF state parameter (must match the value sent in /auth/whoop)
+        - name: error
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Error code if user denied authorization
+      responses:
+        "302":
+          description: Redirect to / (success or failure)
+          headers:
+            Location:
+              schema:
+                type: string
+                example: /
+        "400":
+          description: Invalid state parameter or missing code
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /dashboard:
+    get:
+      summary: Dashboard redirect
+      description: |
+        Legacy route. Redirects to `/` (the API Reference landing page).
+        Preserved for backward compatibility with bookmarks.
+      tags:
+        - Documentation
+      responses:
+        "302":
+          description: Redirect to /
+          headers:
+            Location:
+              schema:
+                type: string
+                example: /
+
+  /api/recovery:
+    get:
+      summary: Get latest recovery data
+      description: |
+        Proxies the request to Whoop API `GET /developer/v2/recovery?limit=1`.
+        Automatically refreshes the access token if expired.
+        Returns normalized recovery data or an error object.
+
+        **Requires authentication** — call `/auth/whoop` first.
+      tags:
+        - Recovery
+      responses:
+        "200":
+          description: Latest recovery data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecoveryResponse"
+              example:
+                scoreState: SCORED
+                recoveryScore: 44
+                hrvRmssdMilli: 31.81
+                restingHeartRate: 64
+                createdAt: "2022-04-24T11:25:44.774Z"
+        "401":
+          description: Not authenticated — tokens missing or refresh failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: not_authenticated
+                message: Not authenticated. Please connect your Whoop account first.
+        "502":
+          description: Whoop API unreachable or returned an error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: whoop_api_error
+                message: Could not retrieve recovery data from Whoop. Please try again later.
+
+  /api/status:
+    get:
+      summary: Authentication status check
+      description: |
+        Returns whether the user is currently authenticated.
+        Does not expose tokens or sensitive data.
+      tags:
+        - Recovery
+      responses:
+        "200":
+          description: Authentication status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusResponse"
+              example:
+                authenticated: true
+
+components:
+  schemas:
+    RecoveryResponse:
+      type: object
+      required:
+        - scoreState
+      properties:
+        scoreState:
+          type: string
+          enum: [SCORED, PENDING_SCORE, UNSCORABLE]
+          description: Whether the recovery has been scored
+        recoveryScore:
+          type: number
+          nullable: true
+          description: Recovery percentage (0-100). Null when scoreState is not SCORED.
+          example: 44
+        hrvRmssdMilli:
+          type: number
+          nullable: true
+          description: Heart rate variability (RMSSD) in milliseconds. Null when not SCORED.
+          example: 31.81
+        restingHeartRate:
+          type: number
+          nullable: true
+          description: Resting heart rate in beats per minute. Null when not SCORED.
+          example: 64
+        createdAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the recovery record was created
+          example: "2022-04-24T11:25:44.774Z"
+
+    StatusResponse:
+      type: object
+      required:
+        - authenticated
+      properties:
+        authenticated:
+          type: boolean
+          description: Whether valid tokens are present
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Machine-readable error code
+          example: whoop_api_error
+        message:
+          type: string
+          description: Human-readable error message
+          example: Could not retrieve recovery data from Whoop. Please try again later.
