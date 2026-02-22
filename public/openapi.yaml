@@ -1,240 +1,884 @@
-openapi: "3.0.3"
+openapi: 3.0.3
 info:
-  title: Whoop Performance Engine — BFF API
-  version: "2.0.0"
+  title: Whoop API — Performance Nutrition Engine Subset
   description: |
-    Backend-for-frontend (BFF) API for the Whoop Performance Engine.
+    The subset of the Whoop v2 API required by the Performance Nutrition Engine.
+    5 endpoints, 5 OAuth scopes. This spec documents only the fields the engine
+    consumes — the full Whoop API may return additional fields which can be ignored.
 
-    This Express server handles OAuth authentication with the Whoop API and
-    proxies recovery data requests. The landing page at `/` serves interactive
-    API documentation powered by Scalar API Reference.
+    **Weekly data pull order:**
+    1. Body measurements (once at setup, then monthly)
+    2. Recovery collection (7–30 days)
+    3. Sleep collection (7–30 days)
+    4. Cycle collection (7–30 days)
+    5. Workout collection (7–30 days)
 
-    ## Getting Started
-
-    1. Visit `/auth/whoop` to connect your Whoop account via OAuth.
-    2. After authorization, you are redirected back to `/`.
-    3. Use the "Try It" panel on any endpoint to send live requests.
-
-    ## Authentication
-
-    Endpoints under `/api/*` require a valid OAuth session. If you have not
-    authenticated, these endpoints return `401`. Initiate OAuth by navigating
-    to `/auth/whoop` in your browser.
+    **Not available from Whoop API:**
+    - Step count (source: phone Health app / Google Fit)
+    - Food log (source: manual user input)
+    - Menstrual cycle phase (source: manual user input)
+  version: 1.0.0
+  contact:
+    name: Performance Nutrition Engine
+  license:
+    name: Private — personal use
 
 servers:
+  - url: https://api.prod.whoop.com/developer
+    description: Whoop Production API
   - url: http://localhost:3000
-    description: Local development server
+    description: Local backend server
 
-paths:
-  /:
-    get:
-      summary: API Reference (Landing Page)
-      description: |
-        Serves the Scalar API Reference documentation page.
-        This interactive page renders the OpenAPI specification and provides
-        a "Try It" panel for calling endpoints directly from the browser.
-      tags:
-        - Documentation
-      responses:
-        "200":
-          description: Scalar API Reference HTML page
-          content:
-            text/html:
-              schema:
-                type: string
-
-  /auth/whoop:
-    get:
-      summary: Initiate Whoop OAuth flow
-      description: |
-        Redirects the user to the Whoop authorization screen.
-        Generates a random `state` parameter for CSRF protection.
-      tags:
-        - Authentication
-      responses:
-        "302":
-          description: Redirect to Whoop authorization URL
-          headers:
-            Location:
-              schema:
-                type: string
-                example: https://api.prod.whoop.com/oauth/oauth2/auth?client_id=...&redirect_uri=...&response_type=code&scope=read:recovery+offline&state=...
-
-  /callback:
-    get:
-      summary: OAuth callback handler
-      description: |
-        Receives the authorization code from Whoop after user authorization.
-        Exchanges the code for access and refresh tokens server-side.
-        Persists both tokens to `.env`.
-        Redirects user to `/` on success or failure.
-      tags:
-        - Authentication
-      parameters:
-        - name: code
-          in: query
-          required: false
-          schema:
-            type: string
-          description: Authorization code from Whoop (present on success)
-        - name: state
-          in: query
-          required: true
-          schema:
-            type: string
-          description: CSRF state parameter (must match the value sent in /auth/whoop)
-        - name: error
-          in: query
-          required: false
-          schema:
-            type: string
-          description: Error code if user denied authorization
-      responses:
-        "302":
-          description: Redirect to / (success or failure)
-          headers:
-            Location:
-              schema:
-                type: string
-                example: /
-        "400":
-          description: Invalid state parameter or missing code
-          content:
-            text/html:
-              schema:
-                type: string
-
-  /dashboard:
-    get:
-      summary: Dashboard redirect
-      description: |
-        Legacy route. Redirects to `/` (the API Reference landing page).
-        Preserved for backward compatibility with bookmarks.
-      tags:
-        - Documentation
-      responses:
-        "302":
-          description: Redirect to /
-          headers:
-            Location:
-              schema:
-                type: string
-                example: /
-
-  /api/recovery:
-    get:
-      summary: Get latest recovery data
-      description: |
-        Proxies the request to Whoop API `GET /developer/v2/recovery?limit=1`.
-        Automatically refreshes the access token if expired.
-        Returns normalized recovery data or an error object.
-
-        **Requires authentication** — call `/auth/whoop` first.
-      tags:
-        - Recovery
-      responses:
-        "200":
-          description: Latest recovery data
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RecoveryResponse"
-              example:
-                scoreState: SCORED
-                recoveryScore: 44
-                hrvRmssdMilli: 31.81
-                restingHeartRate: 64
-                createdAt: "2022-04-24T11:25:44.774Z"
-        "401":
-          description: Not authenticated — tokens missing or refresh failed
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-              example:
-                error: not_authenticated
-                message: Not authenticated. Please connect your Whoop account first.
-        "502":
-          description: Whoop API unreachable or returned an error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-              example:
-                error: whoop_api_error
-                message: Could not retrieve recovery data from Whoop. Please try again later.
-
-  /api/status:
-    get:
-      summary: Authentication status check
-      description: |
-        Returns whether the user is currently authenticated.
-        Does not expose tokens or sensitive data.
-      tags:
-        - Recovery
-      responses:
-        "200":
-          description: Authentication status
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/StatusResponse"
-              example:
-                authenticated: true
+security:
+  - OAuth2:
+      - read:body_measurement
+      - read:recovery
+      - read:sleep
+      - read:cycles
+      - read:workout
 
 components:
+  securitySchemes:
+    OAuth2:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://api.prod.whoop.com/oauth/oauth2/auth
+          tokenUrl: https://api.prod.whoop.com/oauth/oauth2/token
+          scopes:
+            read:body_measurement: Read body measurements (height, weight, max HR)
+            read:recovery: Read recovery scores, HRV, resting HR
+            read:cycles: Read daily strain, calories, heart rate
+            read:sleep: Read sleep stages, performance, debt
+            read:workout: Read workout type, strain, duration, HR zones
+
   schemas:
-    RecoveryResponse:
+    # ──────────────────────────────────────────────
+    # Call 1: Body Measurements
+    # ──────────────────────────────────────────────
+    BodyMeasurement:
       type: object
-      required:
-        - scoreState
+      description: |
+        User's body measurements. Used for TDEE calculation and protein
+        targets (g/kg). Call once at setup, then monthly to catch updates.
       properties:
-        scoreState:
-          type: string
-          enum: [SCORED, PENDING_SCORE, UNSCORABLE]
-          description: Whether the recovery has been scored
-        recoveryScore:
+        height_meter:
           type: number
-          nullable: true
-          description: Recovery percentage (0-100). Null when scoreState is not SCORED.
+          format: float
+          description: Height in metres
+          example: 1.65
+        weight_kilogram:
+          type: number
+          format: float
+          description: Weight in kg. Used for protein target (g/kg) and BMR estimation.
+          example: 67.0
+        max_heart_rate:
+          type: integer
+          description: Whoop-calculated max HR. Used for HR zone classification in workouts.
+          example: 173
+
+    # ──────────────────────────────────────────────
+    # Call 2: Recovery
+    # ──────────────────────────────────────────────
+    RecoveryScore:
+      type: object
+      description: Scores within a recovery record. Only present when score_state is SCORED.
+      properties:
+        user_calibrating:
+          type: boolean
+          description: True if user is still in calibration phase. Ignore these records.
+          example: false
+        recovery_score:
+          type: number
+          format: float
+          description: |
+            Recovery percentage (0–100). Classification:
+            - Green: 67–100% (proceed as planned)
+            - Yellow: 34–66% (note recovery, may need extra carbs)
+            - Red: 0–33% (flag session modification, increase recovery nutrition)
           example: 44
-        hrvRmssdMilli:
+        resting_heart_rate:
           type: number
-          nullable: true
-          description: Heart rate variability (RMSSD) in milliseconds. Null when not SCORED.
-          example: 31.81
-        restingHeartRate:
-          type: number
-          nullable: true
-          description: Resting heart rate in beats per minute. Null when not SCORED.
+          format: float
+          description: Resting HR in bpm. Baseline fitness marker, overtraining detection.
           example: 64
-        createdAt:
+        hrv_rmssd_milli:
+          type: number
+          format: float
+          description: |
+            Heart rate variability in milliseconds (RMSSD method).
+            Primary recovery indicator. Engine calculates:
+            - Average over period
+            - Range (min–max)
+            - Trend: compare last 3 days vs previous 4 (rising/stable/declining)
+          example: 31.813562
+        spo2_percentage:
+          type: number
+          format: float
+          description: Blood oxygen percentage. Flag if consistently below 95%.
+          example: 95.6875
+        skin_temp_celsius:
+          type: number
+          format: float
+          description: Skin temperature in Celsius. Elevated values may indicate illness.
+          example: 33.7
+
+    Recovery:
+      type: object
+      properties:
+        cycle_id:
+          type: integer
+          description: Links this recovery to a physiological cycle (day).
+          example: 93845
+        sleep_id:
+          type: string
+          format: uuid
+          description: ID of the sleep associated with this recovery.
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        user_id:
+          type: integer
+          description: User ID. Not used by the engine.
+          example: 10129
+        created_at:
           type: string
           format: date-time
+          description: Not used by the engine.
+        updated_at:
+          type: string
+          format: date-time
+          description: Not used by the engine.
+        score_state:
+          type: string
+          enum: [SCORED, PENDING_SCORE, UNSCORABLE]
+          description: |
+            Only process records where score_state is "SCORED".
+            PENDING_SCORE: check back later.
+            UNSCORABLE: skip permanently.
+          example: SCORED
+        score:
+          $ref: '#/components/schemas/RecoveryScore'
+
+    RecoveryCollection:
+      type: object
+      properties:
+        records:
+          type: array
+          items:
+            $ref: '#/components/schemas/Recovery'
+        next_token:
+          type: string
           nullable: true
-          description: When the recovery record was created
-          example: "2022-04-24T11:25:44.774Z"
+          description: Pagination token. If present, call again with nextToken param.
+          example: "MTIzOjEyMzEyMw"
 
-    StatusResponse:
+    # ──────────────────────────────────────────────
+    # Call 3: Sleep
+    # ──────────────────────────────────────────────
+    SleepStageSummary:
       type: object
-      required:
-        - authenticated
+      description: Duration of each sleep stage in milliseconds. Divide by 3,600,000 for hours.
       properties:
-        authenticated:
+        total_in_bed_time_milli:
+          type: integer
+          description: Total time in bed (ms).
+          example: 30272735
+        total_awake_time_milli:
+          type: integer
+          description: Time spent awake while in bed (ms).
+          example: 1403507
+        total_no_data_time_milli:
+          type: integer
+          description: Time with no sensor data (ms). Not used by engine.
+          example: 0
+        total_light_sleep_time_milli:
+          type: integer
+          description: Light sleep duration (ms).
+          example: 14905851
+        total_slow_wave_sleep_time_milli:
+          type: integer
+          description: |
+            Deep (slow wave) sleep duration (ms). Key recovery metric.
+            Typical target: 1–2 hours for this population.
+          example: 6630370
+        total_rem_sleep_time_milli:
+          type: integer
+          description: REM sleep duration (ms). Important for cognitive recovery.
+          example: 5879573
+        sleep_cycle_count:
+          type: integer
+          description: Number of sleep cycles. Not used by engine.
+          example: 3
+        disturbance_count:
+          type: integer
+          description: Number of wake-up events. Sleep quality indicator.
+          example: 12
+
+    SleepNeeded:
+      type: object
+      description: |
+        Breakdown of how much sleep the user needs. All values in milliseconds.
+        Total need = baseline + debt + strain + nap (nap is negative or zero).
+        Rising need_from_sleep_debt_milli indicates accumulating sleep debt.
+      properties:
+        baseline_milli:
+          type: integer
+          description: Baseline sleep need without modifiers (ms).
+          example: 27395716
+        need_from_sleep_debt_milli:
+          type: integer
+          description: |
+            Additional sleep needed due to accumulated debt (ms).
+            If this trends upward week over week, flag chronic undersleeping.
+          example: 352230
+        need_from_recent_strain_milli:
+          type: integer
+          description: Additional sleep needed due to recent training load (ms).
+          example: 208595
+        need_from_recent_nap_milli:
+          type: integer
+          description: Reduction in sleep need from naps (ms). Negative or zero.
+          example: -12312
+
+    SleepScore:
+      type: object
+      properties:
+        stage_summary:
+          $ref: '#/components/schemas/SleepStageSummary'
+        sleep_needed:
+          $ref: '#/components/schemas/SleepNeeded'
+        respiratory_rate:
+          type: number
+          format: float
+          description: Breaths per minute during sleep. Sudden elevation may indicate illness.
+          example: 16.11328125
+        sleep_performance_percentage:
+          type: number
+          format: float
+          description: |
+            Time asleep as a percentage of sleep needed (0–100).
+            Below 85% consistently indicates underfuelling or lifestyle issue.
+          example: 98
+        sleep_consistency_percentage:
+          type: number
+          format: float
+          description: |
+            How consistent sleep/wake times are compared to previous day (0–100).
+            Engine flags if below 70% as this affects recovery.
+          example: 90
+        sleep_efficiency_percentage:
+          type: number
+          format: float
+          description: Percentage of time in bed that was actually asleep (0–100).
+          example: 91.69533848
+
+    Sleep:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Sleep record ID. Not used by engine.
+        cycle_id:
+          type: integer
+          description: Links this sleep to a physiological cycle.
+          example: 93845
+        start:
+          type: string
+          format: date-time
+          description: Sleep start time. Used for sleep timing analysis.
+          example: "2022-04-24T02:25:44.774Z"
+        end:
+          type: string
+          format: date-time
+          description: Sleep end time. Duration = end - start.
+          example: "2022-04-24T10:25:44.774Z"
+        timezone_offset:
+          type: string
+          description: Not used by engine.
+        nap:
           type: boolean
-          description: Whether valid tokens are present
+          description: |
+            True if this is a nap, not a primary sleep.
+            Engine filters to nap=false for primary analysis.
+            Naps noted separately if present.
+          example: false
+        score_state:
+          type: string
+          enum: [SCORED, PENDING_SCORE, UNSCORABLE]
+          description: Only process "SCORED" records.
+          example: SCORED
+        score:
+          $ref: '#/components/schemas/SleepScore'
 
-    ErrorResponse:
+    SleepCollection:
+      type: object
+      properties:
+        records:
+          type: array
+          items:
+            $ref: '#/components/schemas/Sleep'
+        next_token:
+          type: string
+          nullable: true
+
+    # ──────────────────────────────────────────────
+    # Call 4: Cycles
+    # ──────────────────────────────────────────────
+    CycleScore:
+      type: object
+      description: |
+        Daily cycle scores. One cycle = one physiological day
+        (sleep onset to next sleep onset).
+      properties:
+        strain:
+          type: number
+          format: float
+          description: |
+            Daily strain score (0–21 scale). Accumulates from workouts
+            and daily activity. Used for day type classification and
+            TDEE estimation.
+          example: 5.2951527
+        kilojoule:
+          type: number
+          format: float
+          description: |
+            Total energy expenditure for the cycle in kilojoules.
+            Convert to kcal: kilojoule / 4.184.
+            Engine uses this as a cross-reference, not primary TDEE.
+          example: 8288.297
+        average_heart_rate:
+          type: integer
+          description: Average HR across the entire cycle.
+          example: 68
+        max_heart_rate:
+          type: integer
+          description: Peak HR during the cycle.
+          example: 141
+
+    Cycle:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Cycle ID. Used to link recovery and sleep data.
+          example: 93845
+        start:
+          type: string
+          format: date-time
+          description: Cycle start (approximately sleep onset).
+          example: "2022-04-24T02:25:44.774Z"
+        end:
+          type: string
+          format: date-time
+          description: Cycle end (next sleep onset).
+          example: "2022-04-24T10:25:44.774Z"
+        timezone_offset:
+          type: string
+          description: Not used by engine.
+        score_state:
+          type: string
+          enum: [SCORED, PENDING_SCORE, UNSCORABLE]
+          description: Only process "SCORED" records.
+          example: SCORED
+        score:
+          $ref: '#/components/schemas/CycleScore'
+
+    CycleCollection:
+      type: object
+      properties:
+        records:
+          type: array
+          items:
+            $ref: '#/components/schemas/Cycle'
+        next_token:
+          type: string
+          nullable: true
+
+    # ──────────────────────────────────────────────
+    # Call 5: Workouts
+    # ──────────────────────────────────────────────
+    ZoneDuration:
+      type: object
+      description: |
+        Time spent in each HR zone in milliseconds.
+        Zone definitions vary by user (based on max_heart_rate).
+        Whoop uses 5 zones. Exact keys may vary.
+      additionalProperties:
+        type: integer
+
+    WorkoutScore:
+      type: object
+      properties:
+        strain:
+          type: number
+          format: float
+          description: |
+            Workout strain (0–21 scale). Used for day type classification:
+            - >= 14: Heavy training day
+            - 8–13.9: Moderate training day
+            - < 8 with cardio sport_id: Zone 2 day
+            Thresholds are adjustable per client.
+          example: 8.2463
+        average_heart_rate:
+          type: integer
+          description: Average HR during the workout.
+          example: 123
+        max_heart_rate:
+          type: integer
+          description: Peak HR during the workout.
+          example: 146
+        kilojoule:
+          type: number
+          format: float
+          description: Calories burned during this workout (in kJ). Divide by 4.184 for kcal.
+          example: 1569.34033203125
+        percent_recorded:
+          type: number
+          format: float
+          description: Percentage of workout with HR data. Not used by engine.
+          example: 100
+        distance_meter:
+          type: number
+          format: float
+          nullable: true
+          description: Distance in metres. Relevant for running/cycling (Zone 2 sessions).
+          example: 1772.77
+        altitude_gain_meter:
+          type: number
+          format: float
+          nullable: true
+          description: Not used by engine.
+        altitude_change_meter:
+          type: number
+          format: float
+          nullable: true
+          description: Not used by engine.
+        zone_duration:
+          $ref: '#/components/schemas/ZoneDuration'
+
+    Workout:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Workout ID. Not used by engine.
+        start:
+          type: string
+          format: date-time
+          description: |
+            Workout start time. Used for:
+            - Calculating session duration (end - start)
+            - Pre-training nutrition timing analysis
+          example: "2022-04-24T02:25:44.774Z"
+        end:
+          type: string
+          format: date-time
+          description: |
+            Workout end time. Used for:
+            - Session duration
+            - Post-training nutrition window (meal within 1–2 hrs of this time)
+          example: "2022-04-24T10:25:44.774Z"
+        timezone_offset:
+          type: string
+          description: Not used by engine.
+        sport_id:
+          type: integer
+          description: |
+            Activity type identifier. Key mappings for this client:
+            - 44: Weightlifting (Strength Trainer)
+            - 96: HIIT
+            - 71: Functional Fitness
+            - 0: Running
+            - 1: Cycling
+            - 43: Pilates
+            - 63: Yoga
+            - -1: Activity (generic — classify by strain)
+
+            Full sport ID list available at Whoop developer docs.
+            Engine uses sport_id + strain to classify day type.
+          example: 44
+        score_state:
+          type: string
+          enum: [SCORED, PENDING_SCORE, UNSCORABLE]
+          description: Only process "SCORED" records.
+          example: SCORED
+        score:
+          $ref: '#/components/schemas/WorkoutScore'
+
+    WorkoutCollection:
+      type: object
+      properties:
+        records:
+          type: array
+          items:
+            $ref: '#/components/schemas/Workout'
+        next_token:
+          type: string
+          nullable: true
+
+    # ──────────────────────────────────────────────
+    # Combined weekly output
+    # ──────────────────────────────────────────────
+    WeeklyDataPull:
+      type: object
+      description: |
+        The combined output file uploaded to Claude each week.
+        Filename format: whoop-week-YYYY-MM-DD.json
+      properties:
+        pull_date:
+          type: string
+          format: date
+          description: Date the pull was executed.
+          example: "2026-02-15"
+        period:
+          type: object
+          properties:
+            start:
+              type: string
+              format: date-time
+              example: "2026-02-08T00:00:00Z"
+            end:
+              type: string
+              format: date-time
+              example: "2026-02-15T00:00:00Z"
+        body:
+          $ref: '#/components/schemas/BodyMeasurement'
+        recovery:
+          type: array
+          items:
+            $ref: '#/components/schemas/Recovery'
+        sleep:
+          type: array
+          items:
+            $ref: '#/components/schemas/Sleep'
+        cycles:
+          type: array
+          items:
+            $ref: '#/components/schemas/Cycle'
+        workouts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Workout'
+
+    # ──────────────────────────────────────────────
+    # Training Summary (local backend)
+    # ──────────────────────────────────────────────
+    TrainingSummary:
       type: object
       required:
-        - error
-        - message
+        - period
+        - frequency_per_week
+        - exercise_types
+        - programme_summary
       properties:
-        error:
-          type: string
-          description: Machine-readable error code
-          example: whoop_api_error
-        message:
-          type: string
-          description: Human-readable error message
-          example: Could not retrieve recovery data from Whoop. Please try again later.
+        period:
+          type: object
+          properties:
+            start:
+              type: string
+              format: date-time
+            end:
+              type: string
+              format: date-time
+            days:
+              type: integer
+        frequency_per_week:
+          type: number
+          format: float
+          description: Average sessions per week over the period
+        exercise_types:
+          type: array
+          items:
+            type: object
+            properties:
+              sport_id:
+                type: integer
+              count:
+                type: integer
+        programme_summary:
+          type: object
+          properties:
+            type:
+              type: string
+              description: Programme classification (Strength block / Endurance block / Mixed strength + endurance)
+            weekly_breakdown:
+              type: object
+              properties:
+                strength_sessions_per_week: { type: number, format: float }
+                cardio_sessions_per_week: { type: number, format: float }
+                mobility_sessions_per_week: { type: number, format: float }
+                heavy_days_per_week: { type: number, format: float }
+                moderate_days_per_week: { type: number, format: float }
+                zone2_days_per_week: { type: number, format: float }
+            details:
+              type: string
+
+  parameters:
+    StartParam:
+      name: start
+      in: query
+      required: false
+      description: |
+        Return records that occurred after or during (inclusive) this time.
+        ISO 8601 format. For weekly pulls, set to 7 days ago.
+      schema:
+        type: string
+        format: date-time
+      example: "2026-02-08T00:00:00Z"
+    EndParam:
+      name: end
+      in: query
+      required: false
+      description: |
+        Return records that ended before (exclusive) this time.
+        Defaults to now if not specified.
+      schema:
+        type: string
+        format: date-time
+      example: "2026-02-15T00:00:00Z"
+    LimitParam:
+      name: limit
+      in: query
+      required: false
+      description: Max records per page. Max 25.
+      schema:
+        type: integer
+        maximum: 25
+        default: 10
+      example: 25
+    NextTokenParam:
+      name: nextToken
+      in: query
+      required: false
+      description: Pagination token from previous response.
+      schema:
+        type: string
+
+paths:
+  # ────────────────────────────────────────────────
+  # Call 1: Body Measurements
+  # ────────────────────────────────────────────────
+  /v2/user/measurement/body:
+    get:
+      operationId: getBodyMeasurements
+      summary: Get body measurements
+      description: |
+        Returns height, weight, and max heart rate.
+
+        **Call frequency:** Once at setup, then monthly.
+        **Engine uses:** Weight for protein target (g/kg) and TDEE.
+        Height for BMR estimation. Max HR for zone classification.
+      tags:
+        - Body
+      security:
+        - OAuth2:
+            - read:body_measurement
+      responses:
+        '200':
+          description: Body measurements retrieved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BodyMeasurement'
+        '401':
+          description: Invalid authorisation.
+        '429':
+          description: Rate limited.
+
+  # ────────────────────────────────────────────────
+  # Call 2: Recovery Collection
+  # ────────────────────────────────────────────────
+  /v2/recovery:
+    get:
+      operationId: getRecoveryCollection
+      summary: Get recovery collection
+      description: |
+        Returns daily recovery scores with HRV, resting HR, SpO2,
+        and skin temperature. Paginated, sorted by sleep start time
+        descending.
+
+        **Call frequency:** Weekly (7 days). Monthly for trend analysis (30 days).
+        **Engine calculates:** Average recovery, Green/Yellow/Red day count,
+        HRV trend (rising/stable/declining), average RHR.
+        **Filter:** Only process records where score_state = "SCORED".
+      tags:
+        - Recovery
+      security:
+        - OAuth2:
+            - read:recovery
+      parameters:
+        - $ref: '#/components/parameters/StartParam'
+        - $ref: '#/components/parameters/EndParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/NextTokenParam'
+      responses:
+        '200':
+          description: Recovery collection retrieved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryCollection'
+        '401':
+          description: Invalid authorisation.
+        '429':
+          description: Rate limited.
+
+  # ────────────────────────────────────────────────
+  # Call 3: Sleep Collection
+  # ────────────────────────────────────────────────
+  /v2/activity/sleep:
+    get:
+      operationId: getSleepCollection
+      summary: Get sleep collection
+      description: |
+        Returns sleep records with stage breakdown, sleep need
+        components, and performance metrics. Paginated, sorted by
+        start time descending.
+
+        **Call frequency:** Weekly (7 days). Monthly for debt trend (30 days).
+        **Engine calculates:** Average sleep hours, sleep vs need (%),
+        deep sleep and REM hours, consistency trend, cumulative debt detection.
+        **Filter:** Only process nap=false AND score_state="SCORED".
+        **Conversion:** All durations in milliseconds.
+        Divide by 3,600,000 for hours. Divide by 60,000 for minutes.
+      tags:
+        - Sleep
+      security:
+        - OAuth2:
+            - read:sleep
+      parameters:
+        - $ref: '#/components/parameters/StartParam'
+        - $ref: '#/components/parameters/EndParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/NextTokenParam'
+      responses:
+        '200':
+          description: Sleep collection retrieved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SleepCollection'
+        '401':
+          description: Invalid authorisation.
+        '429':
+          description: Rate limited.
+
+  # ────────────────────────────────────────────────
+  # Call 4: Cycle Collection
+  # ────────────────────────────────────────────────
+  /v2/cycle:
+    get:
+      operationId: getCycleCollection
+      summary: Get cycle collection
+      description: |
+        Returns physiological cycles with daily strain, total energy
+        expenditure, and heart rate summary. One cycle = one
+        physiological day (sleep onset to next sleep onset).
+        Paginated, sorted by start time descending.
+
+        **Call frequency:** Weekly.
+        **Engine calculates:** Average daily strain, peak strain day,
+        estimated daily calorie burn (kilojoule / 4.184 = kcal).
+        **Filter:** Only process score_state = "SCORED".
+      tags:
+        - Cycles
+      security:
+        - OAuth2:
+            - read:cycles
+      parameters:
+        - $ref: '#/components/parameters/StartParam'
+        - $ref: '#/components/parameters/EndParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/NextTokenParam'
+      responses:
+        '200':
+          description: Cycle collection retrieved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CycleCollection'
+        '401':
+          description: Invalid authorisation.
+        '429':
+          description: Rate limited.
+
+  # ────────────────────────────────────────────────
+  # Call 5: Workout Collection
+  # ────────────────────────────────────────────────
+  /v2/activity/workout:
+    get:
+      operationId: getWorkoutCollection
+      summary: Get workout collection
+      description: |
+        Returns all workouts with activity type, strain, HR data,
+        calories, and zone durations. This replaces manual training
+        logging — the engine extracts session count, type, timing,
+        duration, and intensity from this data.
+
+        **Call frequency:** Weekly.
+        **Engine extracts:** Number of sessions, sport type (from sport_id),
+        start/end times, duration, intensity (strain + HR), calories per session.
+        **Day type classification:**
+        - Workout strain >= 14: Heavy training day
+        - Workout strain 8–13.9: Moderate training day
+        - Workout strain < 8 + cardio sport_id: Zone 2 day
+        - No workout in cycle: Rest day
+        **Filter:** Only process score_state = "SCORED".
+      tags:
+        - Workouts
+      security:
+        - OAuth2:
+            - read:workout
+      parameters:
+        - $ref: '#/components/parameters/StartParam'
+        - $ref: '#/components/parameters/EndParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/NextTokenParam'
+      responses:
+        '200':
+          description: Workout collection retrieved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkoutCollection'
+        '401':
+          description: Invalid authorisation.
+        '429':
+          description: Rate limited.
+
+  # ────────────────────────────────────────────────
+  # Local Backend: Training Summary
+  # ────────────────────────────────────────────────
+  /api/training:
+    get:
+      operationId: getTrainingSummary
+      summary: Get training summary (default last 30 days)
+      description: |
+        Frequency per week, exercise type distribution, and programme summary based on workouts.
+        If `start` and `end` are omitted, the server uses the last 30 days.
+      tags:
+        - Training
+      parameters:
+        - name: start
+          in: query
+          required: false
+          description: ISO 8601 period start (defaults to now - 30 days)
+          schema:
+            type: string
+            format: date-time
+        - name: end
+          in: query
+          required: false
+          description: ISO 8601 period end (defaults to now)
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Training summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrainingSummary'
+          

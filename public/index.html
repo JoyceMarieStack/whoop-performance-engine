@@ -1,19 +1,511 @@
 <!doctype html>
-<html>
-  <head>
-    <title>Whoop Performance Engine — API Reference</title>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-  </head>
-  <body>
-    <noscript>JavaScript is required to view this API reference.</noscript>
-    <div id="app"></div>
-    <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
-    <script>
-      Scalar.createApiReference('#app', {
-        url: '/openapi.yaml',
-        darkMode: true,
-      })
-    </script>
-  </body>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Whoop Performance Engine</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface-2: #1c2129;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-dim: #8b949e;
+      --accent: #58a6ff;
+      --accent-hover: #79c0ff;
+      --green: #3fb950;
+      --red: #f85149;
+      --yellow: #d29922;
+      --radius: 8px;
+      --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      --mono: 'SF Mono', 'Fira Code', 'Fira Mono', Menlo, Consolas, monospace;
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    header h1 {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    #auth-area a, #auth-area button {
+      background: var(--accent);
+      color: #000;
+      border: none;
+      padding: 8px 18px;
+      border-radius: var(--radius);
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+    }
+    #auth-area a:hover, #auth-area button:hover {
+      background: var(--accent-hover);
+    }
+    .status-dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      margin-right: 8px;
+    }
+    .status-dot.connected { background: var(--green); }
+    .status-dot.disconnected { background: var(--red); }
+
+    /* ── Main Layout ── */
+    main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    /* ── Controls ── */
+    .controls {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .controls h2 {
+      font-size: 14px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-dim);
+      margin-bottom: 16px;
+    }
+    .date-row {
+      display: flex;
+      gap: 12px;
+      align-items: end;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .date-row label {
+      font-size: 13px;
+      color: var(--text-dim);
+      display: block;
+      margin-bottom: 4px;
+    }
+    .date-row input {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-family: var(--font);
+    }
+    .date-row input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .presets {
+      display: flex;
+      gap: 8px;
+      align-items: end;
+    }
+    .presets button {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      padding: 8px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      font-family: var(--font);
+    }
+    .presets button:hover { border-color: var(--accent); color: var(--text); }
+    .presets button.active { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Endpoint Buttons ── */
+    .endpoints {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .endpoint-btn {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 18px;
+      border-radius: var(--radius);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      font-family: var(--font);
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .endpoint-btn:hover {
+      border-color: var(--accent);
+      background: #1a2332;
+    }
+    .endpoint-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .endpoint-btn.primary {
+      background: var(--accent);
+      color: #000;
+      border-color: var(--accent);
+      font-weight: 600;
+    }
+    .endpoint-btn.primary:hover {
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
+    }
+
+    /* ── Output Area ── */
+    .output-area {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .output-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface-2);
+    }
+    .output-header span {
+      font-size: 13px;
+      color: var(--text-dim);
+      font-weight: 500;
+    }
+    .copy-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      font-family: var(--font);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: border-color 0.15s;
+    }
+    .copy-btn:hover { border-color: var(--accent); }
+    .copy-btn.copied {
+      border-color: var(--green);
+      color: var(--green);
+    }
+    #json-output {
+      padding: 16px 20px;
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 600px;
+      overflow-y: auto;
+      color: var(--text);
+      tab-size: 2;
+    }
+    #json-output.empty {
+      color: var(--text-dim);
+      font-family: var(--font);
+      font-style: italic;
+    }
+    #json-output.error {
+      color: var(--red);
+    }
+
+    /* ── Loading spinner ── */
+    .loading { display: none; }
+    .loading.active { display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center;
+      padding: 24px;
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+    footer a { color: var(--accent); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Whoop Performance Engine</h1>
+  <div id="auth-area">
+    <span id="status-text"></span>
+  </div>
+</header>
+
+<main>
+  <!-- Date Range Controls -->
+  <section class="controls">
+    <h2>Date Range</h2>
+    <div class="date-row">
+      <div>
+        <label for="start-date">Start</label>
+        <input type="date" id="start-date" />
+      </div>
+      <div>
+        <label for="end-date">End</label>
+        <input type="date" id="end-date" />
+      </div>
+      <div class="presets">
+        <button onclick="setPreset(7)" class="active" data-days="7">7 days</button>
+        <button onclick="setPreset(14)" data-days="14">14 days</button>
+        <button onclick="setPreset(30)" data-days="30">30 days</button>
+      </div>
+    </div>
+
+    <h2>Endpoints</h2>
+    <div class="endpoints">
+      <button class="endpoint-btn" onclick="fetchEndpoint('body')">Body</button>
+      <button class="endpoint-btn" onclick="fetchEndpoint('recovery')">Recovery</button>
+      <button class="endpoint-btn" onclick="fetchEndpoint('sleep')">Sleep</button>
+      <button class="endpoint-btn" onclick="fetchEndpoint('cycle')">Cycles</button>
+      <button class="endpoint-btn" onclick="fetchEndpoint('workout')">Workouts</button>
+      <button class="endpoint-btn primary" onclick="fetchAll()">Fetch All</button>
+    </div>
+  </section>
+
+  <!-- Status bar -->
+  <div id="status-bar" style="display:none; margin-bottom:12px; padding:10px 16px; border-radius:var(--radius); font-size:13px;"></div>
+
+  <!-- JSON Output -->
+  <section class="output-area">
+    <div class="output-header">
+      <span>
+        <span class="loading" id="loading"><span class="spinner"></span>Fetching…</span>
+        <span id="output-label">Response JSON</span>
+      </span>
+      <button class="copy-btn" id="copy-btn" onclick="copyJSON()">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"/></svg>
+        <span id="copy-text">Copy</span>
+      </button>
+    </div>
+    <div id="json-output" class="empty">Select an endpoint and click to fetch data.</div>
+  </section>
+</main>
+
+<footer>
+  <a href="/openapi.yaml" target="_blank">OpenAPI Spec</a>
+</footer>
+
+<script>
+  // ─── State ───
+  let currentJSON = '';
+  let isConnected = false;
+
+  // ─── Date Helpers ───
+  function formatDate(d) {
+    return d.toISOString().slice(0, 10);
+  }
+
+  function setPreset(days) {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(end.getDate() - days);
+    document.getElementById('start-date').value = formatDate(start);
+    document.getElementById('end-date').value = formatDate(end);
+
+    // Update active preset button
+    document.querySelectorAll('.presets button').forEach(b => {
+      b.classList.toggle('active', Number(b.dataset.days) === days);
+    });
+  }
+
+  function getDateParams() {
+    const start = document.getElementById('start-date').value;
+    const end = document.getElementById('end-date').value;
+    const params = new URLSearchParams();
+    if (start) params.set('start', new Date(start).toISOString());
+    if (end) params.set('end', new Date(end + 'T23:59:59').toISOString());
+    return params.toString();
+  }
+
+  // ─── Auth Check ───
+  async function checkAuth() {
+    try {
+      const res = await fetch('/api/status');
+      const data = await res.json();
+      isConnected = data.authenticated;
+    } catch {
+      isConnected = false;
+    }
+    renderAuth();
+  }
+
+  function renderAuth() {
+    const area = document.getElementById('auth-area');
+    if (isConnected) {
+      area.innerHTML = '<span class="status-dot connected"></span><span style="font-size:14px;color:var(--green)">Connected</span>';
+    } else {
+      area.innerHTML = '<span class="status-dot disconnected"></span><a href="/auth/whoop">Connect to Whoop</a>';
+    }
+  }
+
+  // ─── Fetch Helpers ───
+  function setLoading(active, label) {
+    document.getElementById('loading').classList.toggle('active', active);
+    document.getElementById('output-label').textContent = label || 'Response JSON';
+    document.querySelectorAll('.endpoint-btn').forEach(b => b.disabled = active);
+  }
+
+  function showJSON(data, label) {
+    const el = document.getElementById('json-output');
+    const text = JSON.stringify(data, null, 2);
+    currentJSON = text;
+    el.textContent = text;
+    el.className = '';
+    document.getElementById('output-label').textContent = label || 'Response JSON';
+  }
+
+  function showError(msg) {
+    const el = document.getElementById('json-output');
+    el.textContent = msg;
+    el.className = 'error';
+    currentJSON = '';
+  }
+
+  function showEmpty(msg) {
+    const el = document.getElementById('json-output');
+    el.textContent = msg || 'No data returned.';
+    el.className = 'empty';
+    currentJSON = '';
+  }
+
+  async function fetchEndpoint(name) {
+    if (!isConnected) {
+      showError('Not connected. Click "Connect to Whoop" first.');
+      return;
+    }
+
+    const dateParams = getDateParams();
+    const url = name === 'body'
+      ? '/api/body'
+      : `/api/${name}?${dateParams}`;
+
+    const labels = {
+      body: 'Body Measurements',
+      recovery: 'Recovery Collection',
+      sleep: 'Sleep Collection',
+      cycle: 'Cycle Collection',
+      workout: 'Workout Collection',
+    };
+
+    setLoading(true, `Fetching ${labels[name]}…`);
+
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          isConnected = false;
+          renderAuth();
+          showError(data.message || 'Session expired. Please reconnect.');
+          return;
+        }
+        showError(data.message || `Error ${res.status}`);
+        return;
+      }
+
+      showJSON(data, labels[name]);
+    } catch (err) {
+      showError('Network error: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function fetchAll() {
+    if (!isConnected) {
+      showError('Not connected. Click "Connect to Whoop" first.');
+      return;
+    }
+
+    const dateParams = getDateParams();
+    setLoading(true, 'Fetching all data…');
+
+    try {
+      const res = await fetch(`/api/whoop/all?${dateParams}`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          isConnected = false;
+          renderAuth();
+          showError(data.message || 'Session expired. Please reconnect.');
+          return;
+        }
+        showError(data.message || `Error ${res.status}`);
+        return;
+      }
+
+      showJSON(data, 'All WHOOP Data');
+    } catch (err) {
+      showError('Network error: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ─── Copy to Clipboard ───
+  async function copyJSON() {
+    if (!currentJSON) return;
+
+    try {
+      await navigator.clipboard.writeText(currentJSON);
+      const btn = document.getElementById('copy-btn');
+      const txt = document.getElementById('copy-text');
+      btn.classList.add('copied');
+      txt.textContent = 'Copied!';
+      setTimeout(() => {
+        btn.classList.remove('copied');
+        txt.textContent = 'Copy';
+      }, 2000);
+    } catch (err) {
+      console.error('Copy failed:', err);
+    }
+  }
+
+  // ─── Init ───
+  setPreset(7);
+  checkAuth();
+</script>
+
+</body>
 </html>

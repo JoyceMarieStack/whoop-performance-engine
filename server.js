@@ -210,7 +210,7 @@ app.get('/auth/whoop', (req, res) => {
     client_id: CLIENT_ID,
     redirect_uri: REDIRECT_URI,
     response_type: 'code',
-    scope: 'read:recovery offline',
+    scope: 'read:body_measurement read:recovery read:sleep read:cycles read:workout offline',
     state: oauthState,
   });
 
@@ -290,80 +290,239 @@ app.get('/api/status', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// T017 — GET /api/recovery (Recovery data proxy)
+// T017 — GET /api/recovery (Recovery data proxy) [REPLACED by T002-T008]
 // ---------------------------------------------------------------------------
-app.get('/api/recovery', async (req, res) => {
-  // Check authentication
+// (Legacy single-record route removed — replaced by full proxy routes below)
+
+// ---------------------------------------------------------------------------
+// T002 — Shared WHOOP proxy helper with auth, pagination & error handling
+// ---------------------------------------------------------------------------
+const WHOOP_BASE = 'https://api.prod.whoop.com/developer';
+
+/**
+ * Build a WHOOP API URL with query parameters.
+ * For collection endpoints: accepts start, end, limit, nextToken.
+ */
+function buildWhoopUrl(path, query = {}) {
+  const url = new URL(`${WHOOP_BASE}${path}`);
+  if (query.start) url.searchParams.set('start', query.start);
+  if (query.end) url.searchParams.set('end', query.end);
+  url.searchParams.set('limit', '25'); // max page size
+  if (query.nextToken) url.searchParams.set('nextToken', query.nextToken);
+  return url.toString();
+}
+
+/**
+ * Fetch a single page from the WHOOP API with auth headers.
+ * Returns { ok, status, data } or throws on network error.
+ */
+async function whoopFetch(url) {
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) {
+    return { ok: false, status: res.status, data: null };
+  }
+  return { ok: true, status: 200, data: await res.json() };
+}
+
+/**
+ * Fetch all pages of a paginated WHOOP collection endpoint.
+ * Returns the full array of records.
+ */
+async function whoopFetchAllPages(path, query = {}) {
+  const allRecords = [];
+  let nextToken = query.nextToken || null;
+  let firstError = null;
+
+  // First page
+  const firstUrl = buildWhoopUrl(path, query);
+  const first = await whoopFetch(firstUrl);
+  if (!first.ok) return { ok: false, status: first.status, records: [] };
+
+  allRecords.push(...(first.data.records || []));
+  nextToken = first.data.next_token || null;
+
+  // Follow pagination
+  while (nextToken) {
+    const pageUrl = buildWhoopUrl(path, { ...query, nextToken });
+    const page = await whoopFetch(pageUrl);
+    if (!page.ok) {
+      firstError = page;
+      break;
+    }
+    allRecords.push(...(page.data.records || []));
+    nextToken = page.data.next_token || null;
+  }
+
+  return { ok: true, status: 200, records: allRecords };
+}
+
+/**
+ * Express middleware: check auth, return 401 JSON if not authenticated.
+ */
+async function requireAuth(req, res) {
   if (!(await isAuthenticated())) {
+    res.status(401).json({
+      error: 'auth_expired',
+      message: 'Your session has expired. Please reconnect to Whoop.',
+    });
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Map WHOOP error status codes to user-facing error JSON.
+ */
+function whoopErrorResponse(res, status) {
+  if (status === 401) {
     return res.status(401).json({
       error: 'auth_expired',
       message: 'Your session has expired. Please reconnect to Whoop.',
     });
   }
-
-  try {
-    const whoopRes = await fetch(
-      'https://api.prod.whoop.com/developer/v2/recovery?limit=1',
-      {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      }
-    );
-
-    if (!whoopRes.ok) {
-      // If 401 from Whoop, token may be invalid despite our check
-      if (whoopRes.status === 401) {
-        return res.status(401).json({
-          error: 'auth_expired',
-          message: 'Your session has expired. Please reconnect to Whoop.',
-        });
-      }
-      console.error('Whoop API error:', whoopRes.status, await whoopRes.text());
-      return res.status(502).json({
-        error: 'whoop_api_error',
-        message: 'Could not retrieve recovery data from Whoop. Please try again later.',
-      });
-    }
-
-    const data = await whoopRes.json();
-
-    // Normalize response to RecoveryResponse schema
-    if (!data.records || data.records.length === 0) {
-      return res.json({
-        scoreState: 'PENDING_SCORE',
-        recoveryScore: null,
-        hrvRmssdMilli: null,
-        restingHeartRate: null,
-        createdAt: null,
-      });
-    }
-
-    const record = data.records[0];
-    const scoreState = record.score_state || 'PENDING_SCORE';
-
-    if (scoreState === 'SCORED' && record.score) {
-      return res.json({
-        scoreState,
-        recoveryScore: record.score.recovery_score ?? null,
-        hrvRmssdMilli: record.score.hrv_rmssd_milli ?? null,
-        restingHeartRate: record.score.resting_heart_rate ?? null,
-        createdAt: record.created_at || null,
-      });
-    }
-
-    // PENDING_SCORE or UNSCORABLE — null fields
-    return res.json({
-      scoreState,
-      recoveryScore: null,
-      hrvRmssdMilli: null,
-      restingHeartRate: null,
-      createdAt: record.created_at || null,
+  if (status === 429) {
+    return res.status(429).json({
+      error: 'rate_limited',
+      message: 'Rate limit reached. Please wait a moment and try again.',
     });
+  }
+  return res.status(502).json({
+    error: 'whoop_api_error',
+    message: 'Could not retrieve data from Whoop. Please try again later.',
+  });
+}
+
+// ---------------------------------------------------------------------------
+// T003 — GET /api/body (Body measurements proxy)
+// ---------------------------------------------------------------------------
+app.get('/api/body', async (req, res) => {
+  if (!(await requireAuth(req, res))) return;
+  try {
+    const url = `${WHOOP_BASE}/v2/user/measurement/body`;
+    const result = await whoopFetch(url);
+    if (!result.ok) return whoopErrorResponse(res, result.status);
+    res.json(result.data);
+  } catch (err) {
+    console.error('Body fetch error:', err.message);
+    res.status(502).json({ error: 'whoop_api_error', message: 'Could not retrieve body data.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// T004 — GET /api/recovery (Recovery collection proxy with date-range)
+// ---------------------------------------------------------------------------
+app.get('/api/recovery', async (req, res) => {
+  if (!(await requireAuth(req, res))) return;
+  try {
+    const result = await whoopFetchAllPages('/v2/recovery', {
+      start: req.query.start,
+      end: req.query.end,
+    });
+    if (!result.ok) return whoopErrorResponse(res, result.status);
+    res.json({ records: result.records });
   } catch (err) {
     console.error('Recovery fetch error:', err.message);
-    return res.status(502).json({
-      error: 'whoop_api_error',
-      message: 'Could not retrieve recovery data from Whoop. Please try again later.',
+    res.status(502).json({ error: 'whoop_api_error', message: 'Could not retrieve recovery data.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// T005 — GET /api/sleep (Sleep collection proxy with date-range)
+// ---------------------------------------------------------------------------
+app.get('/api/sleep', async (req, res) => {
+  if (!(await requireAuth(req, res))) return;
+  try {
+    const result = await whoopFetchAllPages('/v2/activity/sleep', {
+      start: req.query.start,
+      end: req.query.end,
     });
+    if (!result.ok) return whoopErrorResponse(res, result.status);
+    res.json({ records: result.records });
+  } catch (err) {
+    console.error('Sleep fetch error:', err.message);
+    res.status(502).json({ error: 'whoop_api_error', message: 'Could not retrieve sleep data.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// T006 — GET /api/cycle (Cycle collection proxy with date-range)
+// ---------------------------------------------------------------------------
+app.get('/api/cycle', async (req, res) => {
+  if (!(await requireAuth(req, res))) return;
+  try {
+    const result = await whoopFetchAllPages('/v2/cycle', {
+      start: req.query.start,
+      end: req.query.end,
+    });
+    if (!result.ok) return whoopErrorResponse(res, result.status);
+    res.json({ records: result.records });
+  } catch (err) {
+    console.error('Cycle fetch error:', err.message);
+    res.status(502).json({ error: 'whoop_api_error', message: 'Could not retrieve cycle data.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// T007 — GET /api/workout (Workout collection proxy with date-range)
+// ---------------------------------------------------------------------------
+app.get('/api/workout', async (req, res) => {
+  if (!(await requireAuth(req, res))) return;
+  try {
+    const result = await whoopFetchAllPages('/v2/activity/workout', {
+      start: req.query.start,
+      end: req.query.end,
+    });
+    if (!result.ok) return whoopErrorResponse(res, result.status);
+    res.json({ records: result.records });
+  } catch (err) {
+    console.error('Workout fetch error:', err.message);
+    res.status(502).json({ error: 'whoop_api_error', message: 'Could not retrieve workout data.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// T008 — GET /api/whoop/all (Aggregate: fetch all 5 datasets at once)
+// ---------------------------------------------------------------------------
+app.get('/api/whoop/all', async (req, res) => {
+  if (!(await requireAuth(req, res))) return;
+
+  const { start, end } = req.query;
+
+  try {
+    // Fetch all 5 in parallel
+    const [bodyResult, recoveryResult, sleepResult, cycleResult, workoutResult] =
+      await Promise.all([
+        whoopFetch(`${WHOOP_BASE}/v2/user/measurement/body`),
+        whoopFetchAllPages('/v2/recovery', { start, end }),
+        whoopFetchAllPages('/v2/activity/sleep', { start, end }),
+        whoopFetchAllPages('/v2/cycle', { start, end }),
+        whoopFetchAllPages('/v2/activity/workout', { start, end }),
+      ]);
+
+    // If any critical fetch failed, report the first error
+    for (const r of [bodyResult, recoveryResult, sleepResult, cycleResult, workoutResult]) {
+      if (!r.ok) return whoopErrorResponse(res, r.status);
+    }
+
+    const payload = {
+      pull_date: new Date().toISOString().slice(0, 10),
+      period: {
+        start: start || null,
+        end: end || null,
+      },
+      body: bodyResult.data,
+      recovery: recoveryResult.records,
+      sleep: sleepResult.records,
+      cycles: cycleResult.records,
+      workouts: workoutResult.records,
+    };
+
+    res.json(payload);
+  } catch (err) {
+    console.error('Aggregate fetch error:', err.message);
+    res.status(502).json({ error: 'whoop_api_error', message: 'Could not retrieve all data.' });
   }
 });
 
