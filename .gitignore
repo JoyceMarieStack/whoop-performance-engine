@@ -1,6 +1,9 @@
 # Dependencies
 node_modules/
 
+# Step data (user-entered, local persistence)
+data/
+
 # Build output
 dist/
 build/

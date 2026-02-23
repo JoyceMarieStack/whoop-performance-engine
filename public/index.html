@@ -297,8 +297,29 @@
       <button class="endpoint-btn" onclick="fetchEndpoint('sleep')">Sleep</button>
       <button class="endpoint-btn" onclick="fetchEndpoint('cycle')">Cycles</button>
       <button class="endpoint-btn" onclick="fetchEndpoint('workout')">Workouts</button>
+      <button class="endpoint-btn" onclick="fetchStrength()" style="border-color:var(--yellow);color:var(--yellow)">Strength</button>
+      <button class="endpoint-btn" onclick="fetchSteps()" style="border-color:var(--green);color:var(--green)">Steps</button>
       <button class="endpoint-btn primary" onclick="fetchAll()">Fetch All</button>
     </div>
+  </section>
+
+  <!-- Step Entry Form (009-T006) -->
+  <section class="controls">
+    <h2>Log Steps</h2>
+    <div class="date-row">
+      <div>
+        <label for="step-date">Date</label>
+        <input type="date" id="step-date" />
+      </div>
+      <div>
+        <label for="step-count">Steps</label>
+        <input type="number" id="step-count" min="0" step="1" placeholder="e.g. 8500" style="width:130px;background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:14px;font-family:var(--font)" />
+      </div>
+      <div style="align-self:end">
+        <button class="endpoint-btn" onclick="saveStepEntry()" style="border-color:var(--green);color:var(--green)">Save</button>
+      </div>
+    </div>
+    <div id="step-status" style="font-size:13px;margin-top:8px;min-height:20px"></div>
   </section>
 
   <!-- Status bar -->
@@ -483,6 +504,44 @@
     }
   }
 
+  // ─── Strength Filter ───
+  async function fetchStrength() {
+    if (!isConnected) {
+      showError('Not connected. Click "Connect to Whoop" first.');
+      return;
+    }
+
+    const dateParams = getDateParams();
+    setLoading(true, 'Fetching strength workouts…');
+
+    try {
+      const res = await fetch(`/api/workout/strength?${dateParams}`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          isConnected = false;
+          renderAuth();
+          showError(data.message || 'Session expired. Please reconnect.');
+          return;
+        }
+        showError(data.message || `Error ${res.status}`);
+        return;
+      }
+
+      if (data.records && data.records.length === 0) {
+        showEmpty(data.message || 'No strength workouts found in the selected period.');
+        return;
+      }
+
+      showJSON(data, 'Strength Workouts');
+    } catch (err) {
+      showError('Network error: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   // ─── Copy to Clipboard ───
   async function copyJSON() {
     if (!currentJSON) return;
@@ -502,8 +561,99 @@
     }
   }
 
+  // ─── Steps Retrieval (009-T010) ───
+  async function fetchSteps() {
+    if (!isConnected) {
+      showError('Not connected. Click "Connect to Whoop" first.');
+      return;
+    }
+
+    const dateParams = getDateParams();
+    setLoading(true, 'Fetching saved steps…');
+
+    try {
+      const res = await fetch(`/api/steps?${dateParams}`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          isConnected = false;
+          renderAuth();
+          showError(data.message || 'Session expired. Please reconnect.');
+          return;
+        }
+        showError(data.message || `Error ${res.status}`);
+        return;
+      }
+
+      if (!data.records || data.records.length === 0) {
+        showEmpty('No step entries found for the selected period.');
+        return;
+      }
+
+      showJSON(data, 'Step Entries');
+    } catch (err) {
+      showError('Network error: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ─── Step Entry (009-T007) ───
+  async function saveStepEntry() {
+    if (!isConnected) {
+      showStepStatus('Not connected. Click "Connect to Whoop" first.', 'error');
+      return;
+    }
+
+    const date = document.getElementById('step-date').value;
+    const stepsRaw = document.getElementById('step-count').value;
+
+    if (!date) {
+      showStepStatus('Please select a date.', 'error');
+      return;
+    }
+    const steps = Number(stepsRaw);
+    if (!Number.isInteger(steps) || steps < 0) {
+      showStepStatus('Step count must be a non-negative whole number.', 'error');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/steps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date, steps }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          isConnected = false;
+          renderAuth();
+        }
+        showStepStatus(data.message || `Error ${res.status}`, 'error');
+        return;
+      }
+      showStepStatus(`Saved ${steps.toLocaleString()} steps for ${date}`, 'success');
+    } catch (err) {
+      showStepStatus('Network error: ' + err.message, 'error');
+    }
+  }
+
+  function showStepStatus(msg, type) {
+    const el = document.getElementById('step-status');
+    el.textContent = msg;
+    el.style.color = type === 'error' ? 'var(--red)' : 'var(--green)';
+    if (type === 'success') {
+      setTimeout(() => { el.textContent = ''; }, 4000);
+    }
+  }
+
   // ─── Init ───
   setPreset(7);
+  // Default step-date to today
+  document.getElementById('step-date').value = formatDate(new Date());
   checkAuth();
 </script>
 

@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
-import { readFileSync, writeFileSync, renameSync } from 'node:fs';
+import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import crypto from 'node:crypto';
@@ -11,6 +11,39 @@ import crypto from 'node:crypto';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const ENV_PATH = join(__dirname, '.env');
+const STEPS_DIR = join(__dirname, 'data');
+const STEPS_FILE = join(STEPS_DIR, 'steps.json');
+
+// ---------------------------------------------------------------------------
+// 009-T001 — Seed data/steps.json on startup
+// ---------------------------------------------------------------------------
+if (!existsSync(STEPS_DIR)) mkdirSync(STEPS_DIR, { recursive: true });
+if (!existsSync(STEPS_FILE)) writeFileSync(STEPS_FILE, '{}', 'utf-8');
+
+// ---------------------------------------------------------------------------
+// 009-T003 — Step persistence helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Load all step entries from disk.
+ * Returns an object keyed by ISO date string, e.g. { "2026-02-22": { steps: 8500, updated: "..." } }.
+ */
+function loadSteps() {
+  try {
+    return JSON.parse(readFileSync(STEPS_FILE, 'utf-8'));
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Save the full steps object to disk atomically.
+ */
+function saveSteps(data) {
+  const tmp = STEPS_FILE + '.tmp';
+  writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf-8');
+  renameSync(tmp, STEPS_FILE);
+}
 
 // ---------------------------------------------------------------------------
 // Configuration (AppConfig entity)
@@ -190,6 +223,9 @@ async function isAuthenticated() {
 // ---------------------------------------------------------------------------
 const app = express();
 
+// 009-T004 — Parse JSON request bodies (required for POST /api/steps)
+app.use(express.json());
+
 // CSRF state for OAuth flow (module-level variable)
 let oauthState = '';
 
@@ -298,6 +334,9 @@ app.get('/api/status', async (req, res) => {
 // T002 — Shared WHOOP proxy helper with auth, pagination & error handling
 // ---------------------------------------------------------------------------
 const WHOOP_BASE = 'https://api.prod.whoop.com/developer';
+
+// Sport IDs for strength/resistance-based workouts (008-strength-workouts-filter T001)
+const STRENGTH_SPORT_IDS = [44, 71]; // 44 = Weightlifting, 71 = Functional Fitness
 
 /**
  * Build a WHOOP API URL with query parameters.
@@ -483,6 +522,91 @@ app.get('/api/workout', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// 008-T002 — GET /api/workout/strength (Strength workouts filter)
+// ---------------------------------------------------------------------------
+app.get('/api/workout/strength', async (req, res) => {
+  if (!(await requireAuth(req, res))) return;
+  try {
+    const result = await whoopFetchAllPages('/v2/activity/workout', {
+      start: req.query.start,
+      end: req.query.end,
+    });
+    if (!result.ok) return whoopErrorResponse(res, result.status);
+
+    const filtered = result.records.filter(r => STRENGTH_SPORT_IDS.includes(r.sport_id));
+
+    if (filtered.length === 0) {
+      return res.json({
+        records: [],
+        message: 'No strength workouts (Weightlifting or Functional Fitness) found in the selected period.',
+      });
+    }
+
+    res.json({ records: filtered });
+  } catch (err) {
+    console.error('Strength workout fetch error:', err.message);
+    res.status(502).json({ error: 'whoop_api_error', message: 'Could not retrieve strength workout data.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 009-T005 — POST /api/steps (Save a daily step entry)
+// ---------------------------------------------------------------------------
+app.post('/api/steps', async (req, res) => {
+  if (!(await requireAuth(req, res))) return;
+
+  const { date, steps } = req.body || {};
+
+  // Validate date
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ error: 'validation_error', message: 'A valid date (YYYY-MM-DD) is required.' });
+  }
+
+  // Validate steps: must be a non-negative integer
+  const stepCount = Number(steps);
+  if (!Number.isInteger(stepCount) || stepCount < 0) {
+    return res.status(400).json({ error: 'validation_error', message: 'Step count must be a non-negative integer.' });
+  }
+
+  try {
+    const all = loadSteps();
+    all[date] = { steps: stepCount, updated: new Date().toISOString() };
+    saveSteps(all);
+    res.json({ ok: true, date, steps: stepCount });
+  } catch (err) {
+    console.error('Steps save error:', err.message);
+    res.status(500).json({ error: 'save_error', message: 'Could not save step entry.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 009-T008 — GET /api/steps (Retrieve step entries for a date range)
+// ---------------------------------------------------------------------------
+app.get('/api/steps', async (req, res) => {
+  if (!(await requireAuth(req, res))) return;
+
+  try {
+    const all = loadSteps();
+    const startISO = req.query.start ? req.query.start.slice(0, 10) : null;
+    const endISO = req.query.end ? req.query.end.slice(0, 10) : null;
+
+    const records = Object.entries(all)
+      .filter(([date]) => {
+        if (startISO && date < startISO) return false;
+        if (endISO && date > endISO) return false;
+        return true;
+      })
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, entry]) => ({ date, steps: entry.steps, updated: entry.updated }));
+
+    res.json({ records });
+  } catch (err) {
+    console.error('Steps read error:', err.message);
+    res.status(500).json({ error: 'read_error', message: 'Could not retrieve step entries.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // T008 — GET /api/whoop/all (Aggregate: fetch all 5 datasets at once)
 // ---------------------------------------------------------------------------
 app.get('/api/whoop/all', async (req, res) => {
@@ -517,6 +641,20 @@ app.get('/api/whoop/all', async (req, res) => {
       sleep: sleepResult.records,
       cycles: cycleResult.records,
       workouts: workoutResult.records,
+      // 009-T011 — Include locally-stored step entries in combined payload
+      steps: (() => {
+        const all = loadSteps();
+        const startISO = start ? start.slice(0, 10) : null;
+        const endISO = end ? end.slice(0, 10) : null;
+        return Object.entries(all)
+          .filter(([d]) => {
+            if (startISO && d < startISO) return false;
+            if (endISO && d > endISO) return false;
+            return true;
+          })
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([d, e]) => ({ date: d, steps: e.steps, updated: e.updated }));
+      })(),
     };
 
     res.json(payload);
