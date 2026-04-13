@@ -44,6 +44,7 @@ that proxies authenticated API calls. Nothing more.
 - Static HTML/CSS/JS frontend only.
 - No frameworks or abstractions beyond what is needed.
 - YAGNI: do not add it until you need it.
+- This is a demo app. Not production. 
 
 ## Governance
 

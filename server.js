@@ -201,6 +201,13 @@ app.get('/', (_req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// GET /targets (Weekly training targets page)
+// ---------------------------------------------------------------------------
+app.get('/targets', (_req, res) => {
+  res.sendFile(join(__dirname, 'public', 'targets.html'));
+});
+
+// ---------------------------------------------------------------------------
 // T010 — GET /auth/whoop (Initiate OAuth)
 // ---------------------------------------------------------------------------
 app.get('/auth/whoop', (req, res) => {
@@ -524,6 +531,19 @@ app.get('/api/whoop/all', async (req, res) => {
     console.error('Aggregate fetch error:', err.message);
     res.status(502).json({ error: 'whoop_api_error', message: 'Could not retrieve all data.' });
   }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/chat (Stub — coach-like explanation endpoint)
+// ---------------------------------------------------------------------------
+app.post('/api/chat', express.json(), (req, res) => {
+  const { prompt } = req.body;
+  if (!prompt) {
+    return res.status(400).json({ error: 'missing_prompt', message: 'Request body must include a "prompt" field.' });
+  }
+  // Stub: return a placeholder coach message that references the prompt
+  const message = `Great question! Here's a quick summary of your training:\n\n${prompt}\n\nKeep pushing — consistency is what matters most!`;
+  res.json({ message });
 });
 
 // ---------------------------------------------------------------------------
