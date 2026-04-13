@@ -486,17 +486,14 @@ components:
           type: integer
           description: |
             Activity type identifier. Key mappings for this client:
-            - 44: Weightlifting (Strength Trainer)
-            - 96: HIIT
-            - 71: Functional Fitness
-            - 0: Running
-            - 1: Cycling
-            - 43: Pilates
-            - 63: Yoga
-            - -1: Activity (generic — classify by strain)
+            - 44: Weightlifting (strength)
+            - 45: Weightlifting (strength)
+            - 0: Running (cardio)
+            - 1: Cycling (cardio)
+            - Everything else: excluded
 
             Full sport ID list available at Whoop developer docs.
-            Engine uses sport_id + strain to classify day type.
+            Only Weightlifting, Running, and Cycling are tracked.
           example: 44
         score_state:
           type: string

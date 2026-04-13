@@ -9,6 +9,12 @@ Auto-generated from all feature plans. Last updated: 2026-02-20
 - N/A (tokens in `.env`) (006-scalar-layout-cleanup)
 - JavaScript (Node.js 20+, ES modules) + Express 5, dotenv, built-in `fetch`/Node stdlib (001-implement-whoop-openapi)
 - `.env` file for secrets/token persistence + in-memory token cache (no database) (001-implement-whoop-openapi)
+- Node.js 18+ (server), vanilla ES2020 JS (client) + Express (server only); no client libraries (010-weekly-targets)
+- N/A — no persistence; data fetched live from WHOOP API (010-weekly-targets)
+- Node.js 18+ (server), vanilla ES2020 JS (client) + Express (server), browser Fetch API (client) (010-weekly-targets)
+- N/A (live fetch, no persistence) (010-weekly-targets)
+- Node.js 18+ (server), vanilla ES2020 JavaScript (client) + Express server, browser Fetch API (010-weekly-targets)
+- N/A (no persistence, client-side derived metrics) (010-weekly-targets)
 
 - Node.js 20 LTS (JavaScript, ESM modules) + Express (HTTP server + routing), dotenv (`.env` loading) (003-whoop-dashboard)
 
@@ -28,9 +34,9 @@ npm test && npm run lint
 Node.js 20 LTS (JavaScript, ESM modules): Follow standard conventions
 
 ## Recent Changes
-- 001-implement-whoop-openapi: Added JavaScript (Node.js 20+, ES modules) + Express 5, dotenv, built-in `fetch`/Node stdlib
-- 006-scalar-layout-cleanup: Added Node.js 20 LTS (ESM) + Express 5.2.1, dotenv 17.3.1, Scalar API Reference (CDN)
-- 005-redocly-api-docs: Added Node.js 20 LTS, ESM modules (`"type": "module"`) + Express 5.2.1, dotenv 17.3.1 (existing); @scalar/api-reference CDN bundle (new, no npm install)
+- 010-weekly-targets: Added Node.js 18+ (server), vanilla ES2020 JavaScript (client) + Express server, browser Fetch API
+- 010-weekly-targets: Added Node.js 18+ (server), vanilla ES2020 JS (client) + Express (server), browser Fetch API (client)
+- 010-weekly-targets: Added Node.js 18+ (server), vanilla ES2020 JS (client) + Express (server only); no client libraries
 
 
 <!-- MANUAL ADDITIONS START -->

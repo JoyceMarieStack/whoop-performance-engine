@@ -1,0 +1,872 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Weekly Targets — Whoop Performance Engine</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface-2: #1c2129;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-dim: #8b949e;
+      --accent: #58a6ff;
+      --accent-hover: #79c0ff;
+      --green: #3fb950;
+      --red: #f85149;
+      --yellow: #d29922;
+      --radius: 8px;
+      --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      --mono: 'SF Mono', 'Fira Code', 'Fira Mono', Menlo, Consolas, monospace;
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+    header h1 a { color: var(--text); text-decoration: none; }
+    header h1 a:hover { color: var(--accent); }
+    header nav { display: flex; align-items: center; gap: 16px; }
+    header nav a {
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    header nav a:hover { color: var(--accent-hover); }
+
+    /* ── Main ── */
+    main { max-width: 960px; margin: 0 auto; padding: 24px; }
+
+    /* ── Scoreboard ── */
+    .scoreboard {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      margin-bottom: 20px;
+    }
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .metric-card {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      min-height: 72px;
+    }
+    .metric-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-dim);
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+    .metric-value {
+      font-size: 14px;
+      color: var(--text);
+      line-height: 1.4;
+    }
+
+    /* ── Table ── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    thead th {
+      text-align: left;
+      padding: 12px 16px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-dim);
+      border-bottom: 1px solid var(--border);
+      background: var(--surface-2);
+    }
+    tbody tr.week-row { cursor: pointer; transition: background 0.15s; }
+    tbody tr.week-row:hover { background: var(--surface-2); }
+    tbody td {
+      padding: 10px 16px;
+      font-size: 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    tbody tr:last-child td { border-bottom: none; }
+
+    /* ── Status colours ── */
+    tr.status-met td { border-left: 3px solid var(--green); }
+    tr.status-missed td { border-left: 3px solid var(--red); }
+    tr.status-in-progress td { border-left: 3px solid var(--yellow); }
+    .metric-met {
+      color: var(--green);
+      font-weight: 600;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .badge-met { background: rgba(63,185,80,0.15); color: var(--green); }
+    .badge-missed { background: rgba(248,81,73,0.15); color: var(--red); }
+    .badge-in-progress { background: rgba(210,153,34,0.15); color: var(--yellow); }
+
+    /* ── Detail rows ── */
+    tr.detail-row { display: none; }
+    tr.detail-row.open { display: table-row; }
+    tr.detail-row td {
+      padding: 8px 16px 8px 32px;
+      background: var(--bg);
+      border-left: 3px solid var(--border);
+    }
+    .session-list { list-style: none; }
+    .session-list li {
+      padding: 4px 0;
+      font-size: 13px;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .cat-badge {
+      display: inline-block;
+      padding: 1px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .cat-strength { background: rgba(63,185,80,0.15); color: var(--green); }
+    .cat-cardio { background: rgba(88,166,255,0.15); color: var(--accent); }
+    .cat-excluded { background: rgba(139,148,158,0.15); color: var(--text-dim); }
+
+    /* ── Chat panel ── */
+    .chat-section { margin-top: 20px; }
+    .chat-section button {
+      background: var(--accent);
+      color: #000;
+      border: none;
+      padding: 10px 20px;
+      border-radius: var(--radius);
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .chat-section button:hover { background: var(--accent-hover); }
+    .chat-section button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .chat-panel {
+      margin-top: 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      font-size: 14px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      display: none;
+    }
+    .chat-panel.open { display: block; }
+
+    /* ── Reconciliation / Debug ── */
+    .section-card {
+      margin-top: 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .section-card h2 {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-dim);
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 14px;
+    }
+    .section-body { padding: 12px 14px; }
+    .ok-msg { color: var(--green); font-size: 13px; }
+    .warn-msg { color: var(--yellow); font-size: 13px; }
+    .compact-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      margin-top: 8px;
+    }
+    .compact-table th,
+    .compact-table td {
+      border-bottom: 1px solid var(--border);
+      padding: 6px 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+    .compact-table th {
+      color: var(--text-dim);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-size: 11px;
+    }
+    .compact-table td.mono { font-family: var(--mono); }
+    .debug-toggle {
+      margin-top: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--text-dim);
+    }
+    .debug-toggle input { accent-color: var(--accent); }
+    .debug-panel { display: none; }
+    .debug-panel.open { display: block; }
+
+    /* ── Loading / Error ── */
+    .loading {
+      text-align: center;
+      padding: 48px;
+      color: var(--text-dim);
+      font-size: 15px;
+    }
+    .spinner {
+      display: inline-block;
+      width: 24px; height: 24px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-bottom: 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error-msg {
+      text-align: center;
+      padding: 32px;
+      color: var(--red);
+      font-size: 15px;
+    }
+    .error-msg a { color: var(--accent); }
+
+    /* ── Responsive ── */
+    @media (max-width: 640px) {
+      header { padding: 12px 16px; }
+      main { padding: 16px; }
+      thead th, tbody td { padding: 8px 10px; font-size: 13px; }
+      .metric-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1><a href="/">Whoop Performance Engine</a></h1>
+  <nav>
+    <a href="/targets" style="color:var(--yellow);">Targets</a>
+    <a href="/">Dashboard</a>
+  </nav>
+</header>
+
+<main>
+  <div id="content">
+    <div class="loading">
+      <div class="spinner"></div>
+      <div>Loading workout data…</div>
+    </div>
+  </div>
+
+  <div class="chat-section" id="chat-section" style="display:none;">
+    <button id="explain-btn">Explain My Training</button>
+    <div class="chat-panel" id="chat-panel"></div>
+  </div>
+</main>
+
+<script>
+// ── T004: Sport classification map ──────────────────────────────────────────
+const SPORT_MAP = {
+  44: { name: 'Weightlifting', category: 'strength' },
+  45: { name: 'Weightlifting', category: 'strength' },
+  0:  { name: 'Running',       category: 'cardio'   },
+  1:  { name: 'Cycling',       category: 'cardio'   },
+};
+
+function classifyWorkout(workout) {
+  const mapped = SPORT_MAP[workout.sport_id];
+  if (mapped) {
+    return { workout, category: mapped.category, sportName: mapped.name };
+  }
+  // Everything else is excluded — use API sport_name for display
+  const sportName = workout.sport_name
+    ? workout.sport_name.replace(/[-_]/g, ' ')
+    : `Unknown #${workout.sport_id}`;
+  return { workout, category: 'excluded', sportName };
+}
+
+// ── T005: ISO week helper ───────────────────────────────────────────────────
+function getISOWeek(dateStr) {
+  const d = new Date(dateStr);
+  // Set to nearest Thursday: current date + 4 - current day (Mon=1..Sun=7)
+  const day = d.getUTCDay() || 7; // Convert Sun=0 to 7
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+  return { year: d.getUTCFullYear(), week };
+}
+
+function isoWeekLabel(year, week) {
+  return `${year}-W${String(week).padStart(2, '0')}`;
+}
+
+// Get Monday of a given ISO week
+function getMonday(year, week) {
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const dayOfWeek = jan4.getUTCDay() || 7;
+  const monday = new Date(jan4);
+  monday.setUTCDate(jan4.getUTCDate() - dayOfWeek + 1 + (week - 1) * 7);
+  return monday;
+}
+
+function formatDate(d) {
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${months[d.getUTCMonth()]} ${d.getUTCDate()}`;
+}
+
+function formatDateFull(dateStr) {
+  const d = new Date(dateStr);
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${months[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
+}
+
+function normalizeWorkouts(data) {
+  // Canonical client source of truth array; only workout records are normalized.
+  const records = Array.isArray(data.records) ? data.records : [];
+  return records.map(w => ({ ...w }));
+}
+
+function expectedCategoryForWorkout(workout) {
+  if (workout.sport_id === 44 || workout.sport_id === 45) return 'strength';
+  if (workout.sport_id === 0 || workout.sport_id === 1) return 'cardio';
+  return 'excluded';
+}
+
+function normalizeSportName(workout) {
+  return workout.sport_name
+    ? workout.sport_name.replace(/[-_]/g, ' ')
+    : `Unknown #${workout.sport_id}`;
+}
+
+// ── T006: Fetch and classify ────────────────────────────────────────────────
+async function fetchWorkouts() {
+  const year = new Date().getFullYear();
+  const start = `${year}-01-01T00:00:00.000Z`;
+  const end = new Date().toISOString();
+
+  const res = await fetch(`/api/workout?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
+  if (res.status === 401) {
+    throw new Error('AUTH');
+  }
+  if (!res.ok) {
+    throw new Error(`API error: ${res.status}`);
+  }
+  const data = await res.json();
+
+  return normalizeWorkouts(data);
+}
+
+function classifyWorkouts(workouts) {
+  // Filter to SCORED only, then classify
+  return workouts
+    .filter(w => w.score_state === 'SCORED')
+    .map(classifyWorkout);
+}
+
+// ── T007: Group by ISO week ─────────────────────────────────────────────────
+function groupByWeek(sessions) {
+  const year = new Date().getFullYear();
+  const now = new Date();
+
+  // Current week info
+  const currentIso = getISOWeek(now.toISOString());
+  const currentWeekKey = isoWeekLabel(currentIso.year, currentIso.week);
+
+  // Build a map of sessions by week key
+  const weekMap = new Map();
+  for (const session of sessions) {
+    const iso = getISOWeek(session.workout.start);
+    const key = isoWeekLabel(iso.year, iso.week);
+    if (!weekMap.has(key)) weekMap.set(key, []);
+    weekMap.get(key).push(session);
+  }
+
+  // Generate all weeks from Jan 1 to today
+  const startIso = getISOWeek(`${year}-01-01T00:00:00.000Z`);
+  const summaries = [];
+  let y = startIso.year;
+  let w = startIso.week;
+
+  while (true) {
+    const key = isoWeekLabel(y, w);
+    const monday = getMonday(y, w);
+    const sunday = new Date(monday);
+    sunday.setUTCDate(monday.getUTCDate() + 6);
+
+    // Stop if monday is past today
+    if (monday > now) break;
+
+    const weekSessions = weekMap.get(key) || [];
+    const strengthCount = weekSessions.filter(s => s.category === 'strength').length;
+    const cardioCount = weekSessions.filter(s => s.category === 'cardio').length;
+
+    const isCurrentWeek = key === currentWeekKey;
+    let status;
+    if (isCurrentWeek) {
+      status = (strengthCount >= 3 && cardioCount >= 1) ? 'met' : 'in-progress';
+    } else {
+      status = (strengthCount >= 3 && cardioCount >= 1) ? 'met' : 'missed';
+    }
+
+    summaries.push({
+      weekLabel: `${key} (${formatDate(monday)} – ${formatDate(sunday)})`,
+      isoWeek: key,
+      strengthCount,
+      cardioCount,
+      status,
+      sessions: weekSessions,
+    });
+
+    // Advance to next week
+    w++;
+    // Check if we've gone past the last week of the year
+    // Simple approach: advance Monday by 7 days and recompute
+    const nextMonday = new Date(monday);
+    nextMonday.setUTCDate(monday.getUTCDate() + 7);
+    if (nextMonday > now && key !== currentWeekKey) break;
+    const nextIso = getISOWeek(nextMonday.toISOString());
+    y = nextIso.year;
+    w = nextIso.week;
+  }
+
+  return summaries;
+}
+
+function computeExportVsRenderedDiff(workouts, renderedSummaries) {
+  const exportSessions = workouts
+    .filter(w => w.score_state === 'SCORED')
+    .map(w => ({
+      workout: w,
+      category: expectedCategoryForWorkout(w),
+      sportName: normalizeSportName(w),
+    }));
+
+  const expectedSummaries = groupByWeek(exportSessions);
+  const expectedMap = new Map(expectedSummaries.map(s => [s.isoWeek, s]));
+
+  const diffs = [];
+  for (const actual of renderedSummaries) {
+    const expected = expectedMap.get(actual.isoWeek);
+    if (!expected) continue;
+
+    if (
+      expected.strengthCount !== actual.strengthCount ||
+      expected.cardioCount !== actual.cardioCount ||
+      expected.status !== actual.status
+    ) {
+      diffs.push({
+        isoWeek: actual.isoWeek,
+        expectedStrength: expected.strengthCount,
+        actualStrength: actual.strengthCount,
+        expectedCardio: expected.cardioCount,
+        actualCardio: actual.cardioCount,
+        expectedStatus: expected.status,
+        actualStatus: actual.status,
+      });
+    }
+  }
+
+  return diffs;
+}
+
+function computeScoreboardMetrics(summaries) {
+  const completed = summaries.filter(s => s.status !== 'in-progress');
+  const metWeeks = completed.filter(s => s.status === 'met').length;
+  const completedWeeks = completed.length;
+  const percentage = completedWeeks > 0
+    ? Math.round((metWeeks / completedWeeks) * 100)
+    : 0;
+
+  const last4Completed = completed.slice(-4);
+  const metLast4 = last4Completed.filter(s => s.status === 'met').length;
+  const last4Total = last4Completed.length;
+
+  const currentIso = getISOWeek(new Date().toISOString());
+  const currentWeekKey = isoWeekLabel(currentIso.year, currentIso.week);
+  const currentWeek = summaries.find(s => s.isoWeek === currentWeekKey);
+
+  return {
+    metWeeks,
+    completedWeeks,
+    percentage,
+    metLast4,
+    last4Total,
+    strengthCount: currentWeek ? currentWeek.strengthCount : 0,
+    cardioCount: currentWeek ? currentWeek.cardioCount : 0,
+  };
+}
+
+function renderScoreboard(metrics) {
+  const section = document.createElement('section');
+  section.className = 'scoreboard';
+
+  const grid = document.createElement('div');
+  grid.className = 'metric-grid';
+
+  const entries = [
+    {
+      title: 'Lagging indicator',
+      value: `Completed weeks \u2014 ${metrics.metWeeks} / ${metrics.completedWeeks} (${metrics.percentage}%)`,
+    },
+    {
+      title: 'Recent signal',
+      value: `Last 4 completed weeks \u2014 ${metrics.metLast4} / ${metrics.last4Total}`,
+    },
+    {
+      title: 'Leading indicator',
+      value: `This week \u2014 ${metrics.strengthCount} / 3 strength \u00B7 ${metrics.cardioCount} / 1 cardio`,
+    },
+  ];
+
+  for (const entry of entries) {
+    const card = document.createElement('div');
+    card.className = 'metric-card';
+    card.innerHTML = `
+      <div class="metric-title">${entry.title}</div>
+      <div class="metric-value">${entry.value}</div>
+    `;
+    grid.appendChild(card);
+  }
+
+  section.appendChild(grid);
+  return section;
+}
+
+// ── T009 + T010: Render table with colour coding ────────────────────────────
+function renderTable(summaries) {
+  const table = document.createElement('table');
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>Week</th>
+        <th>Strength (3)</th>
+        <th>Cardio (1)</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+  `;
+
+  const tbody = document.createElement('tbody');
+
+  for (let i = 0; i < summaries.length; i++) {
+    const s = summaries[i];
+    const strengthClass = s.strengthCount >= 3 ? 'metric-met' : '';
+    const cardioClass = s.cardioCount >= 1 ? 'metric-met' : '';
+
+    // ── T009: Week row ──
+    const tr = document.createElement('tr');
+    tr.className = `week-row status-${s.status}`;
+    tr.dataset.index = i;
+
+    const statusBadge = `<span class="badge badge-${s.status}">${
+      s.status === 'met' ? '✓ Met' :
+      s.status === 'missed' ? '✗ Missed' :
+      '⏳ In Progress'
+    }</span>`;
+
+    tr.innerHTML = `
+      <td>${s.weekLabel}</td>
+      <td class="${strengthClass}">${s.strengthCount} / 3</td>
+      <td class="${cardioClass}">${s.cardioCount} / 1</td>
+      <td>${statusBadge}</td>
+    `;
+
+    // ── T012: Expandable toggle ──
+    tr.addEventListener('click', () => {
+      const detail = tbody.querySelector(`tr.detail-row[data-index="${i}"]`);
+      if (detail) detail.classList.toggle('open');
+    });
+
+    tbody.appendChild(tr);
+
+    // ── T012 + T013: Detail row with session list ──
+    const detailTr = document.createElement('tr');
+    detailTr.className = 'detail-row';
+    detailTr.dataset.index = i;
+
+    const detailTd = document.createElement('td');
+    detailTd.colSpan = 4;
+
+    if (s.sessions.length === 0) {
+      detailTd.innerHTML = '<em style="color:var(--text-dim);">No workouts this week</em>';
+    } else {
+      const ul = document.createElement('ul');
+      ul.className = 'session-list';
+      for (const session of s.sessions) {
+        const li = document.createElement('li');
+        const catClass = `cat-${session.category}`;
+        li.innerHTML = `
+          <span class="cat-badge ${catClass}">${session.category}</span>
+          <span>${session.sportName}</span>
+          <span style="color:var(--text-dim);font-size:12px;">${formatDateFull(session.workout.start)}</span>
+        `;
+        ul.appendChild(li);
+      }
+      detailTd.appendChild(ul);
+    }
+
+    detailTr.appendChild(detailTd);
+    tbody.appendChild(detailTr);
+  }
+
+  table.appendChild(tbody);
+  return table;
+}
+
+// ── T016: Build chat prompt ─────────────────────────────────────────────────
+function buildChatPrompt(summaries, discrepancies) {
+  const m = computeScoreboardMetrics(summaries);
+
+  let prompt = `Weekly training target: 3 strength + 1 cardio per week.\n`;
+  prompt += `Lagging indicator: Completed weeks — ${m.metWeeks} / ${m.completedWeeks} (${m.percentage}%).\n`;
+  prompt += `Recent signal: Last 4 completed weeks — ${m.metLast4} / ${m.last4Total}.\n`;
+  prompt += `Leading indicator: This week — ${m.strengthCount} / 3 strength · ${m.cardioCount} / 1 cardio.\n\n`;
+  prompt += `Week-by-week breakdown:\n`;
+
+  for (const s of summaries) {
+    prompt += `- ${s.isoWeek}: ${s.strengthCount} strength, ${s.cardioCount} cardio → ${s.status}\n`;
+  }
+
+  if (discrepancies.length > 0) {
+    prompt += `\nDetected reconciliation mismatches:\n`;
+    for (const d of discrepancies) {
+      prompt += `- ${d.isoWeek}: expected ${d.expectedStrength}/${d.expectedCardio}/${d.expectedStatus}, actual ${d.actualStrength}/${d.actualCardio}/${d.actualStatus}\n`;
+    }
+  }
+
+  prompt += `\nPlease provide a brief, encouraging coach-like summary of this training pattern. Highlight any trends, missed weeks, and offer actionable advice.`;
+  return prompt;
+}
+
+function renderReconciliationReport(discrepancies) {
+  const section = document.createElement('section');
+  section.className = 'section-card';
+
+  const h2 = document.createElement('h2');
+  h2.textContent = 'Reconciliation';
+  section.appendChild(h2);
+
+  const body = document.createElement('div');
+  body.className = 'section-body';
+
+  if (discrepancies.length === 0) {
+    body.innerHTML = '<p class="ok-msg">No discrepancies found between export-derived and rendered weekly totals.</p>';
+  } else {
+    const p = document.createElement('p');
+    p.className = 'warn-msg';
+    p.textContent = `${discrepancies.length} discrepancy week(s) detected.`;
+    body.appendChild(p);
+
+    const table = document.createElement('table');
+    table.className = 'compact-table';
+    table.innerHTML = `
+      <thead>
+        <tr>
+          <th>ISO Week</th>
+          <th>Expected</th>
+          <th>Rendered</th>
+        </tr>
+      </thead>
+    `;
+    const tbody = document.createElement('tbody');
+
+    for (const d of discrepancies) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="mono">${d.isoWeek}</td>
+        <td class="mono">S:${d.expectedStrength} C:${d.expectedCardio} ${d.expectedStatus}</td>
+        <td class="mono">S:${d.actualStrength} C:${d.actualCardio} ${d.actualStatus}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    table.appendChild(tbody);
+    body.appendChild(table);
+  }
+
+  section.appendChild(body);
+  return section;
+}
+
+function renderDebugPanel(classifiedWorkouts) {
+  const wrap = document.createElement('div');
+
+  const toggle = document.createElement('label');
+  toggle.className = 'debug-toggle';
+  toggle.innerHTML = '<input type="checkbox" id="debug-toggle"> <span>Show debug classification view</span>';
+  wrap.appendChild(toggle);
+
+  const panel = document.createElement('section');
+  panel.className = 'section-card debug-panel';
+  panel.id = 'debug-panel';
+  panel.innerHTML = '<h2>Debug Classification View</h2>';
+
+  const body = document.createElement('div');
+  body.className = 'section-body';
+
+  const table = document.createElement('table');
+  table.className = 'compact-table';
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>Workout ID</th>
+        <th>sport_id</th>
+        <th>sport_name</th>
+        <th>Expected</th>
+        <th>Computed</th>
+        <th>ISO Week</th>
+      </tr>
+    </thead>
+  `;
+
+  const tbody = document.createElement('tbody');
+  for (const session of classifiedWorkouts) {
+    const w = session.workout;
+    const expected = expectedCategoryForWorkout(w);
+    const iso = getISOWeek(w.start);
+    const key = isoWeekLabel(iso.year, iso.week);
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="mono">${w.id || '-'}</td>
+      <td class="mono">${w.sport_id}</td>
+      <td>${normalizeSportName(w)}</td>
+      <td class="mono">${expected}</td>
+      <td class="mono">${session.category}</td>
+      <td class="mono">${key}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+
+  table.appendChild(tbody);
+  body.appendChild(table);
+  panel.appendChild(body);
+  wrap.appendChild(panel);
+
+  toggle.querySelector('#debug-toggle').addEventListener('change', (e) => {
+    panel.classList.toggle('open', e.target.checked);
+  });
+
+  return wrap;
+}
+
+// ── T011: Wire up page load ─────────────────────────────────────────────────
+let cachedSummaries = null;
+let cachedDiscrepancies = [];
+
+async function init() {
+  const content = document.getElementById('content');
+
+  try {
+    const workouts = await fetchWorkouts();
+    const sessions = classifyWorkouts(workouts);
+    const summaries = groupByWeek(sessions);
+    const metrics = computeScoreboardMetrics(summaries);
+    const discrepancies = computeExportVsRenderedDiff(workouts, summaries);
+
+    cachedSummaries = summaries;
+    cachedDiscrepancies = discrepancies;
+
+    content.innerHTML = '';
+    content.appendChild(renderScoreboard(metrics));
+    content.appendChild(renderReconciliationReport(discrepancies));
+    content.appendChild(renderTable(summaries));
+    content.appendChild(renderDebugPanel(sessions));
+
+    // Show chat section
+    document.getElementById('chat-section').style.display = '';
+
+  } catch (err) {
+    if (err.message === 'AUTH') {
+      content.innerHTML = `
+        <div class="error-msg">
+          <p>Not authenticated. <a href="/">Log in via the dashboard</a> first, then come back.</p>
+        </div>`;
+    } else {
+      content.innerHTML = `
+        <div class="error-msg">
+          <p>Failed to load workout data: ${err.message}</p>
+          <p><a href="/targets">Retry</a></p>
+        </div>`;
+    }
+  }
+}
+
+// ── T015 + T017: Chat explain button ────────────────────────────────────────
+document.getElementById('explain-btn').addEventListener('click', async () => {
+  if (!cachedSummaries) return;
+
+  const btn = document.getElementById('explain-btn');
+  const panel = document.getElementById('chat-panel');
+
+  btn.disabled = true;
+  btn.textContent = 'Thinking…';
+  panel.classList.add('open');
+  panel.textContent = 'Loading…';
+
+  try {
+    const prompt = buildChatPrompt(cachedSummaries, cachedDiscrepancies);
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt }),
+    });
+    if (!res.ok) throw new Error(`Chat error: ${res.status}`);
+    const data = await res.json();
+    panel.textContent = data.message;
+  } catch (err) {
+    panel.textContent = `Error: ${err.message}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Explain My Training';
+  }
+});
+
+init();
+</script>
+</body>
+</html>
