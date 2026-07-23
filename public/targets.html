@@ -289,8 +289,10 @@
 <header>
   <h1><a href="/">Whoop Performance Engine</a></h1>
   <nav>
+    <a href="/">Home</a>
     <a href="/targets" style="color:var(--yellow);">Targets</a>
-    <a href="/">Dashboard</a>
+    <a href="/retro">Retro</a>
+    <a href="/data-fetcher">Data Fetcher</a>
   </nav>
 </header>
 
@@ -311,10 +313,11 @@
 <script>
 // ── T004: Sport classification map ──────────────────────────────────────────
 const SPORT_MAP = {
-  44: { name: 'Weightlifting', category: 'strength' },
-  45: { name: 'Weightlifting', category: 'strength' },
-  0:  { name: 'Running',       category: 'cardio'   },
-  1:  { name: 'Cycling',       category: 'cardio'   },
+  44:  { name: 'Weightlifting', category: 'strength' },
+  45:  { name: 'Weightlifting', category: 'strength' },
+  123: { name: 'Weightlifting', category: 'strength' },
+  0:   { name: 'Running',       category: 'cardio'   },
+  1:   { name: 'Cycling',       category: 'cardio'   },
 };
 
 function classifyWorkout(workout) {
@@ -371,7 +374,7 @@ function normalizeWorkouts(data) {
 }
 
 function expectedCategoryForWorkout(workout) {
-  if (workout.sport_id === 44 || workout.sport_id === 45) return 'strength';
+  if (workout.sport_id === 44 || workout.sport_id === 45 || workout.sport_id === 123) return 'strength';
   if (workout.sport_id === 0 || workout.sport_id === 1) return 'cardio';
   return 'excluded';
 }

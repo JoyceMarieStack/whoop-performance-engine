@@ -208,6 +208,13 @@ app.get('/targets', (_req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// GET /data-fetcher (Raw WHOOP data fetcher / API explorer page)
+// ---------------------------------------------------------------------------
+app.get('/data-fetcher', (_req, res) => {
+  res.sendFile(join(__dirname, 'public', 'data-fetcher.html'));
+});
+
+// ---------------------------------------------------------------------------
 // T010 — GET /auth/whoop (Initiate OAuth)
 // ---------------------------------------------------------------------------
 app.get('/auth/whoop', (req, res) => {
@@ -531,6 +538,412 @@ app.get('/api/whoop/all', async (req, res) => {
     console.error('Aggregate fetch error:', err.message);
     res.status(502).json({ error: 'whoop_api_error', message: 'Could not retrieve all data.' });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Hevy integration — config & startup validation
+// ---------------------------------------------------------------------------
+const HEVY_API_KEY = process.env.HEVY_API_KEY || '';
+if (!HEVY_API_KEY) {
+  console.warn(
+    'WARNING: HEVY_API_KEY is not set — Hevy-dependent routes (muscle balance retro) will return 503 until configured.\n' +
+    '  Copy your key into .env (see .env.example).'
+  );
+}
+
+function requireHevyConfig(res) {
+  if (!HEVY_API_KEY) {
+    res.status(503).json({
+      error: 'hevy_not_configured',
+      message: 'HEVY_API_KEY is not set. Add it to .env to enable this feature.',
+    });
+    return false;
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Hevy API client
+// ---------------------------------------------------------------------------
+const HEVY_BASE = 'https://api.hevyapp.com/v1';
+
+async function hevyFetch(path, query = {}) {
+  const url = new URL(`${HEVY_BASE}${path}`);
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== null) url.searchParams.set(key, value);
+  }
+  const res = await fetch(url.toString(), {
+    headers: { 'api-key': HEVY_API_KEY },
+  });
+  if (!res.ok) {
+    return { ok: false, status: res.status, data: null };
+  }
+  return { ok: true, status: 200, data: await res.json() };
+}
+
+/**
+ * Fetch Hevy workouts, paginating until either pages run out or a page's
+ * workouts are entirely older than `since` (Hevy returns newest first).
+ */
+async function fetchHevyWorkoutsSince(since) {
+  const sinceTime = new Date(since).getTime();
+  const allWorkouts = [];
+  let page = 1;
+  const pageSize = 10;
+
+  while (true) {
+    const result = await hevyFetch('/workouts', { page, pageSize });
+    if (!result.ok) return { ok: false, status: result.status, workouts: [] };
+
+    const workouts = result.data.workouts || [];
+    if (workouts.length === 0) break;
+
+    let hitOlder = false;
+    for (const w of workouts) {
+      if (new Date(w.start_time).getTime() >= sinceTime) {
+        allWorkouts.push(w);
+      } else {
+        hitOlder = true;
+      }
+    }
+
+    if (hitOlder || page >= (result.data.page_count || page)) break;
+    page++;
+  }
+
+  return { ok: true, status: 200, workouts: allWorkouts };
+}
+
+// Exercise -> muscle group mapping is cached in memory for the server's
+// lifetime, since it only changes when the user adds new exercises in Hevy.
+let exerciseMuscleMapCache = null;
+
+// Fallback for custom exercises Hevy doesn't tag with a muscle group.
+const FALLBACK_MUSCLE_MAP = {};
+
+const MACRO_GROUP_MAP = {
+  chest: 'chest',
+  upper_back: 'back', lower_back: 'back', lats: 'back', traps: 'back',
+  quadriceps: 'legs', hamstrings: 'legs', glutes: 'legs', calves: 'legs', adductors: 'legs', abductors: 'legs',
+  shoulders: 'shoulders',
+  biceps: 'arms', triceps: 'arms', forearms: 'arms',
+  abdominals: 'core', obliques: 'core',
+};
+const MACRO_GROUPS = ['chest', 'back', 'legs', 'shoulders', 'arms', 'core', 'unmapped'];
+
+function toMacroGroup(hevyMuscleGroup) {
+  if (!hevyMuscleGroup) return 'unmapped';
+  return MACRO_GROUP_MAP[hevyMuscleGroup] || 'unmapped';
+}
+
+/**
+ * Fetch (and cache) exercise_template_id -> primary muscle group from Hevy.
+ */
+async function getExerciseMuscleMap() {
+  if (exerciseMuscleMapCache) return exerciseMuscleMapCache;
+
+  const map = {};
+  let page = 1;
+  const pageSize = 100;
+
+  while (true) {
+    const result = await hevyFetch('/exercise_templates', { page, pageSize });
+    if (!result.ok) return null;
+
+    const templates = result.data.exercise_templates || [];
+    if (templates.length === 0) break;
+
+    for (const t of templates) {
+      map[t.id] = t.primary_muscle_group || FALLBACK_MUSCLE_MAP[t.title?.toLowerCase()] || null;
+    }
+
+    if (page >= (result.data.page_count || page)) break;
+    page++;
+  }
+
+  exerciseMuscleMapCache = map;
+  return map;
+}
+
+// ---------------------------------------------------------------------------
+// Weekly volume computation
+// ---------------------------------------------------------------------------
+
+/** Monday 00:00 UTC for the week containing `date`. */
+function getWeekStart(date) {
+  const d = new Date(date);
+  const day = d.getUTCDay() || 7; // Sun=0 -> 7
+  d.setUTCDate(d.getUTCDate() - day + 1);
+  d.setUTCHours(0, 0, 0, 0);
+  return d;
+}
+
+function addDays(date, days) {
+  const d = new Date(date);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d;
+}
+
+/**
+ * Roll up Hevy workouts into per-macro-muscle-group tonnage and set counts
+ * for the week starting at `weekStart` (Monday 00:00 UTC).
+ */
+function computeWeeklyMuscleVolume(workouts, muscleMap, weekStart) {
+  const weekEnd = addDays(weekStart, 7);
+  const volume = {};
+  for (const group of MACRO_GROUPS) volume[group] = { tonnage: 0, sets: 0 };
+
+  for (const workout of workouts) {
+    const start = new Date(workout.start_time);
+    if (start < weekStart || start >= weekEnd) continue;
+
+    for (const exercise of workout.exercises || []) {
+      const macroGroup = toMacroGroup(muscleMap[exercise.exercise_template_id]);
+      for (const set of exercise.sets || []) {
+        volume[macroGroup].tonnage += (set.reps || 0) * (set.weight_kg || 0);
+        volume[macroGroup].sets += 1;
+      }
+    }
+  }
+
+  return volume;
+}
+
+/**
+ * Per-exercise tonnage history (from whatever workouts were fetched),
+ * ordered chronologically.
+ */
+function computeExerciseTonnageHistory(workouts) {
+  const history = {};
+
+  for (const workout of workouts) {
+    for (const exercise of workout.exercises || []) {
+      const title = exercise.title || `Exercise ${exercise.exercise_template_id}`;
+      let tonnage = 0;
+      for (const set of exercise.sets || []) {
+        tonnage += (set.reps || 0) * (set.weight_kg || 0);
+      }
+      if (!history[title]) history[title] = [];
+      history[title].push({ date: workout.start_time, tonnage });
+    }
+  }
+
+  for (const title of Object.keys(history)) {
+    history[title].sort((a, b) => new Date(a.date) - new Date(b.date));
+  }
+
+  return history;
+}
+
+function classifyTrend(sessions) {
+  if (sessions.length < 2) return 'insufficient data';
+  const first = sessions[0].tonnage;
+  const last = sessions[sessions.length - 1].tonnage;
+  if (last > first) return 'increasing';
+  if (last < first) return 'decreasing';
+  return 'flat';
+}
+
+// ---------------------------------------------------------------------------
+// Recovery/strain correlation and flagging
+// ---------------------------------------------------------------------------
+
+async function getAverageRecovery(start, end) {
+  const result = await whoopFetchAllPages('/v2/recovery', { start, end });
+  if (!result.ok) return { ok: false, status: result.status, average: null };
+  const scores = result.records
+    .map(r => r.score?.recovery_score)
+    .filter(s => typeof s === 'number');
+  if (scores.length === 0) return { ok: true, status: 200, average: null };
+  const average = scores.reduce((a, b) => a + b, 0) / scores.length;
+  return { ok: true, status: 200, average };
+}
+
+function flagMuscleGroup(currentTonnage, trailingAverage, recoveryTrend) {
+  if (trailingAverage === null) return 'balanced'; // no baseline yet — can't judge confidently
+  if (currentTonnage > trailingAverage && recoveryTrend === 'down') return 'over-worked';
+  if (currentTonnage < trailingAverage && recoveryTrend === 'up') return 'under-worked';
+  return 'balanced';
+}
+
+// ---------------------------------------------------------------------------
+// Weekly workout-completion progress — mirrors the same sport_id
+// classification and 3-strength + 1-cardio target used by targets.html.
+// ---------------------------------------------------------------------------
+const WORKOUT_SPORT_MAP = {
+  44: 'strength', 45: 'strength', 123: 'strength',
+  0: 'cardio', 1: 'cardio',
+};
+const WEEKLY_TARGET = { strength: 3, cardio: 1 };
+
+function computeCompletionProgress(workouts, weekStart) {
+  const weekEnd = addDays(weekStart, 7);
+  let strengthCount = 0;
+  let cardioCount = 0;
+
+  for (const w of workouts) {
+    if (w.score_state !== 'SCORED') continue;
+    const start = new Date(w.start);
+    if (start < weekStart || start >= weekEnd) continue;
+
+    const category = WORKOUT_SPORT_MAP[w.sport_id];
+    if (category === 'strength') strengthCount++;
+    else if (category === 'cardio') cardioCount++;
+  }
+
+  const target = WEEKLY_TARGET.strength + WEEKLY_TARGET.cardio;
+  const completed = Math.min(strengthCount, WEEKLY_TARGET.strength) + Math.min(cardioCount, WEEKLY_TARGET.cardio);
+
+  return { strengthCount, cardioCount, target, completed };
+}
+
+// ---------------------------------------------------------------------------
+// Next-workout recommendation — directly resurfaces under-worked flags,
+// never a separate heuristic.
+// ---------------------------------------------------------------------------
+function recommendNextWorkout(muscleGroups) {
+  const underWorked = Object.entries(muscleGroups)
+    .filter(([, data]) => data.flag === 'under-worked')
+    .map(([group]) => group);
+
+  if (underWorked.length === 0) {
+    return { muscleGroups: [], message: 'No specific muscle group needs prioritizing — this week looks balanced.' };
+  }
+  return { muscleGroups: underWorked, message: `Prioritize: ${underWorked.join(', ')}` };
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/hevy/workouts (Hevy workout data proxy with date-range)
+// ---------------------------------------------------------------------------
+app.get('/api/hevy/workouts', async (req, res) => {
+  if (!requireHevyConfig(res)) return;
+  try {
+    const start = req.query.start || '2026-01-01T00:00:00.000Z';
+    const end = req.query.end ? new Date(req.query.end) : null;
+
+    const result = await fetchHevyWorkoutsSince(start);
+    if (!result.ok) {
+      return res.status(502).json({ error: 'hevy_api_error', message: 'Could not retrieve workout data from Hevy.' });
+    }
+
+    const workouts = end ? result.workouts.filter(w => new Date(w.start_time) <= end) : result.workouts;
+    res.json({ workouts });
+  } catch (err) {
+    console.error('Hevy workouts fetch error:', err.message);
+    res.status(502).json({ error: 'hevy_api_error', message: 'Could not retrieve workout data from Hevy.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/retro/muscle-balance (Weekly muscle balance retro)
+// ---------------------------------------------------------------------------
+app.get('/api/retro/muscle-balance', async (req, res) => {
+  if (!requireHevyConfig(res)) return;
+  if (!(await requireAuth(req, res))) return;
+
+  try {
+    const now = new Date();
+    const currentWeekStart = getWeekStart(now);
+    const fixedTrendStart = new Date('2026-01-01T00:00:00.000Z');
+    const baselineStart = addDays(currentWeekStart, -28); // current + trailing 4 weeks
+    const fetchStart = fixedTrendStart < baselineStart ? fixedTrendStart : baselineStart;
+
+    const [muscleMap, workoutsResult] = await Promise.all([
+      getExerciseMuscleMap(),
+      fetchHevyWorkoutsSince(fetchStart),
+    ]);
+
+    if (!muscleMap || !workoutsResult.ok) {
+      return res.status(502).json({
+        error: 'hevy_api_error',
+        source: 'hevy',
+        message: 'Could not retrieve data from Hevy. Please try again later.',
+      });
+    }
+
+    const currentWeekVolume = computeWeeklyMuscleVolume(workoutsResult.workouts, muscleMap, currentWeekStart);
+
+    // Trailing 4-week average (excludes current week; stops at the fixed start date)
+    const trailingWeeks = [];
+    for (let i = 1; i <= 4; i++) {
+      const weekStart = addDays(currentWeekStart, -7 * i);
+      if (weekStart < fixedTrendStart) break;
+      trailingWeeks.push(computeWeeklyMuscleVolume(workoutsResult.workouts, muscleMap, weekStart));
+    }
+    const partialBaseline = trailingWeeks.length < 4;
+
+    const trailingAverages = {};
+    for (const group of MACRO_GROUPS) {
+      trailingAverages[group] = trailingWeeks.length === 0
+        ? null
+        : trailingWeeks.reduce((acc, w) => acc + w[group].tonnage, 0) / trailingWeeks.length;
+    }
+
+    // Recovery trend: this week's average recovery vs the prior week's
+    const priorWeekStart = addDays(currentWeekStart, -7);
+    const [currentRecovery, priorRecovery, whoopWorkoutsResult] = await Promise.all([
+      getAverageRecovery(currentWeekStart.toISOString(), addDays(currentWeekStart, 7).toISOString()),
+      getAverageRecovery(priorWeekStart.toISOString(), currentWeekStart.toISOString()),
+      whoopFetchAllPages('/v2/activity/workout', {
+        start: currentWeekStart.toISOString(),
+        end: addDays(currentWeekStart, 7).toISOString(),
+      }),
+    ]);
+
+    if (!currentRecovery.ok || !priorRecovery.ok || !whoopWorkoutsResult.ok) {
+      return res.status(502).json({
+        error: 'whoop_api_error',
+        source: 'whoop',
+        message: 'Could not retrieve data from Whoop. Please try again later.',
+      });
+    }
+
+    let recoveryTrend = 'unknown';
+    if (currentRecovery.average !== null && priorRecovery.average !== null) {
+      if (currentRecovery.average > priorRecovery.average) recoveryTrend = 'up';
+      else if (currentRecovery.average < priorRecovery.average) recoveryTrend = 'down';
+      else recoveryTrend = 'flat';
+    }
+
+    const muscleGroups = {};
+    for (const group of MACRO_GROUPS) {
+      muscleGroups[group] = {
+        tonnage: currentWeekVolume[group].tonnage,
+        sets: currentWeekVolume[group].sets,
+        trailingAverageTonnage: trailingAverages[group],
+        recoveryTrend,
+        flag: flagMuscleGroup(currentWeekVolume[group].tonnage, trailingAverages[group], recoveryTrend),
+      };
+    }
+
+    const exerciseHistory = computeExerciseTonnageHistory(workoutsResult.workouts);
+    const exercises = {};
+    for (const [title, sessions] of Object.entries(exerciseHistory)) {
+      exercises[title] = { sessions, trend: classifyTrend(sessions) };
+    }
+
+    const completionProgress = computeCompletionProgress(whoopWorkoutsResult.records, currentWeekStart);
+    const recommendation = recommendNextWorkout(muscleGroups);
+
+    res.json({
+      weekStart: currentWeekStart.toISOString().slice(0, 10),
+      partialBaseline,
+      muscleGroups,
+      exercises,
+      completionProgress,
+      recommendation,
+    });
+  } catch (err) {
+    console.error('Muscle balance retro error:', err.message);
+    res.status(502).json({ error: 'retro_error', message: 'Could not compute the weekly muscle balance retro.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /retro (Weekly muscle balance retro page)
+// ---------------------------------------------------------------------------
+app.get('/retro', (_req, res) => {
+  res.sendFile(join(__dirname, 'public', 'retro.html'));
 });
 
 // ---------------------------------------------------------------------------

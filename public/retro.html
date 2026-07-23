@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Weekly Muscle Balance Retro — Whoop Performance Engine</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface-2: #1c2129;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-dim: #8b949e;
+      --accent: #58a6ff;
+      --accent-hover: #79c0ff;
+      --green: #3fb950;
+      --red: #f85149;
+      --yellow: #d29922;
+      --radius: 8px;
+      --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      --mono: 'SF Mono', 'Fira Code', 'Fira Mono', Menlo, Consolas, monospace;
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+    header h1 a { color: var(--text); text-decoration: none; }
+    header h1 a:hover { color: var(--accent); }
+    header nav { display: flex; align-items: center; gap: 16px; }
+    header nav a { color: var(--accent); text-decoration: none; font-size: 14px; font-weight: 600; }
+    header nav a:hover { color: var(--accent-hover); }
+
+    main { max-width: 960px; margin: 0 auto; padding: 24px; }
+
+    .note {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      margin-bottom: 20px;
+      font-size: 13px;
+      color: var(--text-dim);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+    thead th {
+      text-align: left;
+      padding: 12px 16px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-dim);
+      border-bottom: 1px solid var(--border);
+      background: var(--surface-2);
+    }
+    tbody td {
+      padding: 10px 16px;
+      font-size: 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    tbody tr:last-child td { border-bottom: none; }
+    tr.flag-over-worked td { border-left: 3px solid var(--red); }
+    tr.flag-under-worked td { border-left: 3px solid var(--yellow); }
+    tr.flag-balanced td { border-left: 3px solid var(--green); }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .badge-over-worked { background: rgba(248,81,73,0.15); color: var(--red); }
+    .badge-under-worked { background: rgba(210,153,34,0.15); color: var(--yellow); }
+    .badge-balanced { background: rgba(63,185,80,0.15); color: var(--green); }
+
+    .trend-increasing { color: var(--green); }
+    .trend-decreasing { color: var(--red); }
+    .trend-flat { color: var(--text-dim); }
+    .trend-insufficient-data { color: var(--text-dim); font-style: italic; }
+
+    section.section-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+    section.section-card h2 {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-dim);
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 14px;
+    }
+
+    .loading { text-align: center; padding: 48px; color: var(--text-dim); font-size: 15px; }
+    .spinner {
+      display: inline-block;
+      width: 24px; height: 24px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-bottom: 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error-msg { text-align: center; padding: 32px; color: var(--red); font-size: 15px; }
+    .error-msg a { color: var(--accent); }
+
+    @media (max-width: 640px) {
+      header { padding: 12px 16px; }
+      main { padding: 16px; }
+      thead th, tbody td { padding: 8px 10px; font-size: 13px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1><a href="/">Whoop Performance Engine</a></h1>
+  <nav>
+    <a href="/">Home</a>
+    <a href="/targets">Targets</a>
+    <a href="/retro" style="color:var(--yellow);">Retro</a>
+    <a href="/data-fetcher">Data Fetcher</a>
+  </nav>
+</header>
+
+<main>
+  <div id="content">
+    <div class="loading">
+      <div class="spinner"></div>
+      <div>Loading muscle balance retro…</div>
+    </div>
+  </div>
+</main>
+
+<script>
+const MACRO_LABELS = {
+  chest: 'Chest', back: 'Back', legs: 'Legs', shoulders: 'Shoulders',
+  arms: 'Arms', core: 'Core', unmapped: 'Unmapped',
+};
+
+function formatNumber(n) {
+  return Math.round(n).toLocaleString();
+}
+
+function renderProgressBanner(progress) {
+  const wrap = document.createElement('div');
+  wrap.className = 'note';
+  wrap.innerHTML = `Completed <strong>${progress.completed} of ${progress.target}</strong> planned workouts this week (${progress.strengthCount}/3 strength &middot; ${progress.cardioCount}/1 cardio)`;
+  return wrap;
+}
+
+function renderRecommendation(recommendation) {
+  const wrap = document.createElement('section');
+  wrap.className = 'section-card';
+  wrap.innerHTML = '<h2>Next Workout Recommendation</h2>';
+
+  const body = document.createElement('div');
+  body.style.padding = '14px';
+  body.style.fontSize = '14px';
+
+  if (recommendation.muscleGroups.length === 0) {
+    body.innerHTML = `<span class="badge badge-balanced">balanced</span> ${recommendation.message}`;
+  } else {
+    const badges = recommendation.muscleGroups
+      .map(g => `<span class="badge badge-under-worked">${MACRO_LABELS[g] || g}</span>`)
+      .join(' ');
+    body.innerHTML = `${badges}<div style="margin-top:8px;color:var(--text-dim);">${recommendation.message}</div>`;
+  }
+
+  wrap.appendChild(body);
+  return wrap;
+}
+
+function renderMuscleGroupTable(muscleGroups, partialBaseline) {
+  const wrap = document.createElement('section');
+  wrap.className = 'section-card';
+  wrap.innerHTML = '<h2>Muscle Group Balance — This Week</h2>';
+
+  if (partialBaseline) {
+    const note = document.createElement('div');
+    note.className = 'note';
+    note.style.margin = '12px 14px 0';
+    note.textContent = 'Trailing baseline is based on fewer than 4 weeks of history — flags may be less reliable until more data accumulates.';
+    wrap.appendChild(note);
+  }
+
+  const table = document.createElement('table');
+  table.style.margin = '14px';
+  table.style.width = 'calc(100% - 28px)';
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>Muscle Group</th>
+        <th>Tonnage</th>
+        <th>Sets</th>
+        <th>4-wk Avg Tonnage</th>
+        <th>Recovery Trend</th>
+        <th>Flag</th>
+      </tr>
+    </thead>
+  `;
+  const tbody = document.createElement('tbody');
+
+  for (const [group, data] of Object.entries(muscleGroups)) {
+    if (group === 'unmapped' && data.tonnage === 0 && data.sets === 0) continue;
+    const tr = document.createElement('tr');
+    tr.className = `flag-${data.flag}`;
+    const avg = data.trailingAverageTonnage === null ? '—' : formatNumber(data.trailingAverageTonnage);
+    tr.innerHTML = `
+      <td>${MACRO_LABELS[group] || group}</td>
+      <td>${formatNumber(data.tonnage)}</td>
+      <td>${data.sets}</td>
+      <td>${avg}</td>
+      <td>${data.recoveryTrend}</td>
+      <td><span class="badge badge-${data.flag}">${data.flag.replace('-', ' ')}</span></td>
+    `;
+    tbody.appendChild(tr);
+  }
+
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+  return wrap;
+}
+
+function renderExerciseTrends(exercises) {
+  const wrap = document.createElement('section');
+  wrap.className = 'section-card';
+  wrap.innerHTML = '<h2>Exercise Tonnage Trend (since Jan 1, 2026)</h2>';
+
+  const table = document.createElement('table');
+  table.style.margin = '14px';
+  table.style.width = 'calc(100% - 28px)';
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>Exercise</th>
+        <th>Sessions</th>
+        <th>First Tonnage</th>
+        <th>Latest Tonnage</th>
+        <th>Trend</th>
+      </tr>
+    </thead>
+  `;
+  const tbody = document.createElement('tbody');
+
+  const entries = Object.entries(exercises).sort((a, b) => a[0].localeCompare(b[0]));
+  for (const [title, info] of entries) {
+    const sessions = info.sessions;
+    const first = sessions[0]?.tonnage ?? 0;
+    const latest = sessions[sessions.length - 1]?.tonnage ?? 0;
+    const trendClass = `trend-${info.trend.replace(/\s+/g, '-')}`;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${title}</td>
+      <td>${sessions.length}</td>
+      <td>${formatNumber(first)}</td>
+      <td>${formatNumber(latest)}</td>
+      <td class="${trendClass}">${info.trend}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+  return wrap;
+}
+
+async function init() {
+  const content = document.getElementById('content');
+
+  try {
+    const res = await fetch('/api/retro/muscle-balance');
+
+    if (res.status === 401) throw new Error('AUTH');
+    if (res.status === 503) throw new Error('HEVY_NOT_CONFIGURED');
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.message || `API error: ${res.status}`);
+    }
+
+    const data = await res.json();
+
+    content.innerHTML = '';
+    const note = document.createElement('div');
+    note.className = 'note';
+    note.textContent = `Week starting ${data.weekStart}`;
+    content.appendChild(note);
+    content.appendChild(renderProgressBanner(data.completionProgress));
+    content.appendChild(renderRecommendation(data.recommendation));
+    content.appendChild(renderMuscleGroupTable(data.muscleGroups, data.partialBaseline));
+    content.appendChild(renderExerciseTrends(data.exercises));
+
+  } catch (err) {
+    if (err.message === 'AUTH') {
+      content.innerHTML = `
+        <div class="error-msg">
+          <p>Not authenticated. <a href="/">Log in via the dashboard</a> first, then come back.</p>
+        </div>`;
+    } else if (err.message === 'HEVY_NOT_CONFIGURED') {
+      content.innerHTML = `
+        <div class="error-msg">
+          <p>Hevy is not configured. Add HEVY_API_KEY to your .env file and restart the server.</p>
+        </div>`;
+    } else {
+      content.innerHTML = `
+        <div class="error-msg">
+          <p>Failed to load the retro: ${err.message}</p>
+          <p><a href="/retro">Retry</a></p>
+        </div>`;
+    }
+  }
+}
+
+init();
+</script>
+</body>
+</html>
