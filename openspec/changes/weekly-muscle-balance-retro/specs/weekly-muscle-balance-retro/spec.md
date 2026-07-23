@@ -22,20 +22,19 @@ The system SHALL count the number of hard sets performed per macro muscle group 
 - **WHEN** no Hevy workouts exist for the requested week
 - **THEN** the system SHALL return a set count of zero per muscle group
 
-### Requirement: Track tonnage trend per exercise
-The system SHALL return per-session tonnage (sets × reps × weight) history for each exercise, starting from January 1, 2026, and SHALL classify the overall trend across that history as "increasing", "flat", or "decreasing".
+### Requirement: Track tonnage history per exercise
+The system SHALL return per-session tonnage (sets × reps × weight) history for each exercise, starting from January 1, 2026, ordered chronologically, so the user can read their own progressive-overload trend from the raw numbers.
 
 #### Scenario: Exercise history returned
-- **WHEN** the trend is requested for an exercise with logged sessions since January 1, 2026
+- **WHEN** the history is requested for an exercise with logged sessions since January 1, 2026
 - **THEN** the system SHALL return each session's date and tonnage for that exercise, ordered chronologically
-
-#### Scenario: Trend classified from full history
-- **WHEN** an exercise's tonnage across its full history since January 1, 2026 shows a net increase, no meaningful change, or a net decrease
-- **THEN** the system SHALL label the exercise's trend as "increasing", "flat", or "decreasing" respectively
 
 #### Scenario: No sessions logged since January 1, 2026
 - **WHEN** an exercise has no logged sessions since January 1, 2026
-- **THEN** the system SHALL report its trend as "insufficient data"
+- **THEN** the system SHALL return an empty history for that exercise, not an error
+
+### Requirement (deferred, not implemented): Classify tonnage trend per exercise
+A future change MAY classify each exercise's tonnage history as "increasing", "flat", or "decreasing". This is explicitly not implemented yet — what counts as a meaningful change (first-vs-last comparison, percentage threshold, trendline slope, etc.) is an open question (see design.md) that was deliberately left undecided rather than guessed. Do not archive this requirement as current system behavior.
 
 ### Requirement: Correlate volume with WHOOP recovery/strain trend
 The system SHALL compare each muscle group's current-week volume to the user's trailing 4-week average for that muscle group, and compare the current week's WHOOP recovery trend to the prior week.
@@ -96,9 +95,9 @@ The system SHALL expose the weekly muscle-balance retro as a JSON API endpoint a
 - **WHEN** a user navigates to the retro page
 - **THEN** the system SHALL display each macro muscle group's weekly volume, trend, and flag (over-worked / under-worked / balanced) for the most recently completed week
 
-#### Scenario: Retro displays sets and tonnage trend
+#### Scenario: Retro displays sets and tonnage history
 - **WHEN** a user requests the retro page or API
-- **THEN** the response SHALL include weekly set count per muscle group and per-exercise tonnage history/trend, alongside the existing volume/recovery flags
+- **THEN** the response SHALL include weekly set count per muscle group and per-exercise tonnage history, alongside the existing volume/recovery flags
 
 #### Scenario: Retro displays completion progress and next-workout recommendation
 - **WHEN** a user requests the retro page or API

@@ -735,15 +735,6 @@ function computeExerciseTonnageHistory(workouts) {
   return history;
 }
 
-function classifyTrend(sessions) {
-  if (sessions.length < 2) return 'insufficient data';
-  const first = sessions[0].tonnage;
-  const last = sessions[sessions.length - 1].tonnage;
-  if (last > first) return 'increasing';
-  if (last < first) return 'decreasing';
-  return 'flat';
-}
-
 // ---------------------------------------------------------------------------
 // Recovery/strain correlation and flagging
 // ---------------------------------------------------------------------------
@@ -916,11 +907,7 @@ app.get('/api/retro/muscle-balance', async (req, res) => {
       };
     }
 
-    const exerciseHistory = computeExerciseTonnageHistory(workoutsResult.workouts);
-    const exercises = {};
-    for (const [title, sessions] of Object.entries(exerciseHistory)) {
-      exercises[title] = { sessions, trend: classifyTrend(sessions) };
-    }
+    const exercises = computeExerciseTonnageHistory(workoutsResult.workouts);
 
     const completionProgress = computeCompletionProgress(whoopWorkoutsResult.records, currentWeekStart);
     const recommendation = recommendNextWorkout(muscleGroups);

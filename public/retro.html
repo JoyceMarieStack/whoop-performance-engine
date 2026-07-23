@@ -102,11 +102,6 @@
     .badge-under-worked { background: rgba(210,153,34,0.15); color: var(--yellow); }
     .badge-balanced { background: rgba(63,185,80,0.15); color: var(--green); }
 
-    .trend-increasing { color: var(--green); }
-    .trend-decreasing { color: var(--red); }
-    .trend-flat { color: var(--text-dim); }
-    .trend-insufficient-data { color: var(--text-dim); font-style: italic; }
-
     section.section-card {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -259,7 +254,7 @@ function renderMuscleGroupTable(muscleGroups, partialBaseline) {
 function renderExerciseTrends(exercises) {
   const wrap = document.createElement('section');
   wrap.className = 'section-card';
-  wrap.innerHTML = '<h2>Exercise Tonnage Trend (since Jan 1, 2026)</h2>';
+  wrap.innerHTML = '<h2>Exercise Tonnage History (since Jan 1, 2026)</h2>';
 
   const table = document.createElement('table');
   table.style.margin = '14px';
@@ -269,27 +264,22 @@ function renderExerciseTrends(exercises) {
       <tr>
         <th>Exercise</th>
         <th>Sessions</th>
-        <th>First Tonnage</th>
-        <th>Latest Tonnage</th>
-        <th>Trend</th>
+        <th>Tonnage by Session (chronological)</th>
       </tr>
     </thead>
   `;
   const tbody = document.createElement('tbody');
 
   const entries = Object.entries(exercises).sort((a, b) => a[0].localeCompare(b[0]));
-  for (const [title, info] of entries) {
-    const sessions = info.sessions;
-    const first = sessions[0]?.tonnage ?? 0;
-    const latest = sessions[sessions.length - 1]?.tonnage ?? 0;
-    const trendClass = `trend-${info.trend.replace(/\s+/g, '-')}`;
+  for (const [title, sessions] of entries) {
+    const history = sessions
+      .map(s => `${new Date(s.date).toLocaleDateString()}: ${formatNumber(s.tonnage)}`)
+      .join(' → ');
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${title}</td>
       <td>${sessions.length}</td>
-      <td>${formatNumber(first)}</td>
-      <td>${formatNumber(latest)}</td>
-      <td class="${trendClass}">${info.trend}</td>
+      <td>${history}</td>
     `;
     tbody.appendChild(tr);
   }
